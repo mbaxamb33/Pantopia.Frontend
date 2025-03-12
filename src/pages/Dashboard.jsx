@@ -1,23 +1,21 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, contactService, healthCheck } from '../api/apiService';
 
 const Dashboard = () => {
-  const { currentUser, accessToken } = useAuth();
+  const { currentUser } = useAuth();
   const [stats, setStats] = useState({
     contacts: 0,
     companies: 0,
     projects: 0,
     conversations: 0,
   });
+  const [recentContacts, setRecentContacts] = useState([]);
+  const [recentProjects, setRecentProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // For API testing
-  const [apiTestStatus, setApiTestStatus] = useState('idle');
-  const [apiTestResult, setApiTestResult] = useState(null);
-  const [selectedTest, setSelectedTest] = useState('health');
 
   // Fetch initial stats
   useEffect(() => {
@@ -26,13 +24,28 @@ const Dashboard = () => {
       setError(null);
       
       try {
-        // For now, set fake data since we're focusing on testing the API connection
+        // For demo purposes, we'll use mock data
+        // In a real application, this would fetch from the API
         setStats({
           contacts: 24,
           companies: 8,
           projects: 5,
           conversations: 12,
         });
+
+        // Mock recent contacts
+        setRecentContacts([
+          { id: 1, first_name: { String: 'John', Valid: true }, last_name: { String: 'Doe', Valid: true }, email: { String: 'john@example.com', Valid: true }, company_name: { String: 'Acme Inc', Valid: true } },
+          { id: 2, first_name: { String: 'Sarah', Valid: true }, last_name: { String: 'Johnson', Valid: true }, email: { String: 'sarah@example.com', Valid: true }, company_name: { String: 'Tech Solutions', Valid: true } },
+          { id: 3, first_name: { String: 'Michael', Valid: true }, last_name: { String: 'Brown', Valid: true }, email: { String: 'michael@example.com', Valid: true }, company_name: { String: 'Global Services', Valid: true } },
+        ]);
+
+        // Mock recent projects
+        setRecentProjects([
+          { id: 1, name: 'Website Redesign', status: 'active', value: { String: '5000.00', Valid: true }, due_date: { Time: '2025-06-30', Valid: true } },
+          { id: 2, name: 'Product Launch', status: 'active', value: { String: '12000.00', Valid: true }, due_date: { Time: '2025-05-15', Valid: true } },
+          { id: 3, name: 'Marketing Campaign', status: 'completed', value: { String: '3500.00', Valid: true }, due_date: { Time: '2025-04-01', Valid: true } },
+        ]);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');
@@ -44,44 +57,6 @@ const Dashboard = () => {
     fetchDashboardData();
   }, []);
 
-  // Function to run API tests
-  const runApiTest = async () => {
-    setApiTestStatus('loading');
-    setApiTestResult(null);
-    
-    try {
-      let result;
-      
-      switch (selectedTest) {
-        case 'health':
-          result = await healthCheck();
-          break;
-        case 'user':
-          result = await userService.getCurrentUser();
-          break;
-        case 'contacts':
-          result = await contactService.getContacts();
-          break;
-        default:
-          throw new Error('Invalid test selected');
-      }
-      
-      setApiTestResult({
-        success: true,
-        data: result
-      });
-      setApiTestStatus('success');
-    } catch (error) {
-      console.error('API test error:', error);
-      setApiTestResult({
-        success: false,
-        error: error.message || 'Unknown error',
-        details: error.response?.data || error
-      });
-      setApiTestStatus('error');
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -92,8 +67,12 @@ const Dashboard = () => {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Welcome back, {currentUser?.name || 'User'}!</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-2">Welcome back, {currentUser?.name || 'User'}!</h1>
+        <p className="text-gray-600">Here's an overview of your sales activities and performance</p>
+      </div>
       
+      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard title="Contacts" value={stats.contacts} icon="👥" color="bg-blue-500" />
         <StatCard title="Companies" value={stats.companies} icon="🏢" color="bg-green-500" />
@@ -101,96 +80,105 @@ const Dashboard = () => {
         <StatCard title="Conversations" value={stats.conversations} icon="💬" color="bg-yellow-500" />
       </div>
       
-      {/* API Testing Section */}
-      <div className="bg-white p-6 rounded shadow mb-8">
-        <h2 className="text-xl font-semibold mb-4">API Connection Test</h2>
-        <p className="text-gray-600 mb-4">
-          Test your connection to the backend API endpoints. This is useful for debugging.
-        </p>
-        
-        <div className="flex flex-col md:flex-row gap-4 mb-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
-            <select
-              value={selectedTest}
-              onChange={(e) => setSelectedTest(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded"
-            >
-              <option value="health">Health Check</option>
-              <option value="user">Get Current User</option>
-              <option value="contacts">List Contacts</option>
-            </select>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Recent Contacts */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Recent Contacts</h2>
+            <Link to="/contacts" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+              View All →
+            </Link>
           </div>
           
-          <div className="flex items-end">
-            <button
-              onClick={runApiTest}
-              disabled={apiTestStatus === 'loading'}
-              className={`px-4 py-2 rounded text-white font-medium ${
-                apiTestStatus === 'loading' 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {apiTestStatus === 'loading' ? 'Testing...' : 'Run Test'}
-            </button>
-          </div>
-        </div>
-        
-        {/* Authentication status */}
-        <div className="bg-gray-100 p-4 rounded mb-4">
-          <h3 className="font-medium mb-2">Authentication Status</h3>
-          <p className="text-sm">
-            {accessToken 
-              ? <span className="text-green-600">✅ Authenticated</span>
-              : <span className="text-red-600">❌ Not authenticated</span>
-            }
-          </p>
-        </div>
-        
-        {/* Test Results */}
-        {apiTestResult && (
-          <div className={`border rounded p-4 ${
-            apiTestResult.success ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'
-          }`}>
-            <h3 className="font-medium mb-2">
-              {apiTestResult.success ? '✅ Success' : '❌ Error'}
-            </h3>
-            
-            {apiTestResult.success ? (
-              <div>
-                <p className="text-sm text-gray-700 mb-2">API returned successfully</p>
-                <div className="bg-white p-3 rounded border border-gray-200 max-h-60 overflow-auto">
-                  <pre className="text-xs whitespace-pre-wrap">
-                    {JSON.stringify(apiTestResult.data, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm text-red-700 mb-2">{apiTestResult.error}</p>
-                {apiTestResult.details && (
-                  <div className="bg-white p-3 rounded border border-gray-200 max-h-60 overflow-auto">
-                    <pre className="text-xs whitespace-pre-wrap">
-                      {JSON.stringify(apiTestResult.details, null, 2)}
-                    </pre>
+          {recentContacts.length === 0 ? (
+            <p className="text-gray-500">No recent contacts found.</p>
+          ) : (
+            <div className="space-y-4">
+              {recentContacts.map(contact => (
+                <div key={contact.id} className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                      {contact.first_name.String.charAt(0)}{contact.last_name.String.charAt(0)}
+                    </div>
+                    <div className="ml-3">
+                      <p className="font-medium text-gray-800">{contact.first_name.String} {contact.last_name.String}</p>
+                      <p className="text-sm text-gray-500">{contact.company_name.Valid ? contact.company_name.String : 'No company'}</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                  <Link to={`/contacts/${contact.id}`} className="text-sm text-blue-600 hover:text-blue-800">
+                    View
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* Recent Projects */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Active Projects</h2>
+            <Link to="/projects" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+              View All →
+            </Link>
           </div>
-        )}
+          
+          {recentProjects.length === 0 ? (
+            <p className="text-gray-500">No active projects found.</p>
+          ) : (
+            <div className="space-y-4">
+              {recentProjects.map(project => (
+                <div key={project.id} className="border-b border-gray-100 pb-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-gray-800">{project.name}</h3>
+                    <StatusBadge status={project.status} />
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <p className="text-gray-500">
+                      Value: {project.value.Valid ? `$${parseFloat(project.value.String).toLocaleString()}` : 'N/A'}
+                    </p>
+                    <p className="text-gray-500">
+                      Due: {project.due_date.Valid ? new Date(project.due_date.Time).toLocaleDateString() : 'No date'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded shadow">
-          <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-          <p className="text-gray-500">No recent activity to display</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded shadow">
-          <h2 className="text-xl font-semibold mb-4">Upcoming Tasks</h2>
-          <p className="text-gray-500">No upcoming tasks</p>
+      {/* Activity Timeline */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
+        <ActivityTimeline />
+      </div>
+      
+      {/* Quick Actions */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <QuickActionCard 
+            title="Add Contact" 
+            description="Create a new contact in your network" 
+            icon="👤" 
+            link="/contacts"
+            color="bg-blue-50 text-blue-600" 
+          />
+          <QuickActionCard 
+            title="New Project" 
+            description="Start tracking a new sales opportunity" 
+            icon="🚀" 
+            link="/projects"
+            color="bg-purple-50 text-purple-600" 
+          />
+          <QuickActionCard 
+            title="Schedule Meeting" 
+            description="Set up a call or meeting with contacts" 
+            icon="📅" 
+            link="/meetings"
+            color="bg-green-50 text-green-600" 
+          />
         </div>
       </div>
     </div>
@@ -199,7 +187,7 @@ const Dashboard = () => {
 
 // Stat Card Component
 const StatCard = ({ title, value, icon, color }) => (
-  <div className="bg-white rounded shadow p-6">
+  <div className="bg-white rounded-lg shadow-md p-6">
     <div className="flex items-center justify-between">
       <div>
         <p className="text-gray-500 text-sm">{title}</p>
@@ -211,5 +199,83 @@ const StatCard = ({ title, value, icon, color }) => (
     </div>
   </div>
 );
+
+// Status Badge Component
+const StatusBadge = ({ status }) => {
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'bg-green-100 text-green-800';
+      case 'completed':
+        return 'bg-blue-100 text-blue-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+};
+
+// Quick Action Card
+const QuickActionCard = ({ title, description, icon, link, color }) => (
+  <Link to={link} className="block p-4 border border-gray-200 rounded-lg hover:shadow-md transition duration-300">
+    <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center mb-3`}>
+      <span className="text-xl">{icon}</span>
+    </div>
+    <h3 className="font-medium text-gray-800 mb-1">{title}</h3>
+    <p className="text-sm text-gray-500">{description}</p>
+  </Link>
+);
+
+// Activity Timeline
+const ActivityTimeline = () => {
+  // This would normally fetch from an API
+  const activities = [
+    { id: 1, type: 'contact', action: 'added', subject: 'John Smith', timestamp: '2 hours ago' },
+    { id: 2, type: 'project', action: 'updated', subject: 'Website Redesign', timestamp: 'Yesterday' },
+    { id: 3, type: 'email', action: 'sent', subject: 'Follow-up with ABC Corp', timestamp: '2 days ago' },
+    { id: 4, type: 'meeting', action: 'scheduled', subject: 'Quarterly Review', timestamp: '3 days ago' },
+  ];
+
+  const getActivityIcon = (type) => {
+    switch (type) {
+      case 'contact': return '👤';
+      case 'project': return '📁';
+      case 'email': return '📧';
+      case 'meeting': return '📅';
+      default: return '🔔';
+    }
+  };
+
+  if (activities.length === 0) {
+    return <p className="text-gray-500">No recent activity.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {activities.map(activity => (
+        <div key={activity.id} className="flex">
+          <div className="mr-4">
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+              {getActivityIcon(activity.type)}
+            </div>
+          </div>
+          <div>
+            <p className="text-gray-800">
+              <span className="font-medium">{activity.action.charAt(0).toUpperCase() + activity.action.slice(1)}</span> {activity.type} - {activity.subject}
+            </p>
+            <p className="text-sm text-gray-500">{activity.timestamp}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export default Dashboard;

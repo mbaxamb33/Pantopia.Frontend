@@ -1,10 +1,10 @@
 // src/App.jsx
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { setupInterceptors } from './api/apiClient';
 
-// Layout
+// Layout & Protected Route
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -21,8 +21,18 @@ import SalesFlows from './pages/SalesFlows';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
+// Entity Detail Pages
+import ContactDetail from './pages/contacts/ContactDetail';
+// import CompanyDetail from './pages/companies/CompanyDetail';
+// import ProjectDetail from './pages/projects/ProjectDetail';
+// import ConversationDetail from './pages/conversations/ConversationDetail';
+
+// Notification Context
+import { NotificationProvider } from './context/NotificationContext';
+
 function App() {
   const { accessToken, refreshAccessToken, logout } = useAuth();
+  const [appReady, setAppReady] = useState(false);
 
   // Setup API interceptors with auth functions
   useEffect(() => {
@@ -31,35 +41,60 @@ function App() {
       refreshAccessToken,
       logout
     );
+    setAppReady(true);
   }, [accessToken, refreshAccessToken, logout]);
 
+  if (!appReady) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <Router>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<Home />} />
-        <Route path="/callback" element={<AuthCallback />} />
-        
-        {/* Protected routes */}
-        <Route element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contacts" element={<Contacts />} />
-            <Route path="/companies" element={<Companies />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/conversations" element={<Conversations />} />
-            <Route path="/meetings" element={<Meetings />} />
-            <Route path="/sales-flows" element={<SalesFlows />} />
-            <Route path="/settings" element={<Settings />} />
+    <NotificationProvider>
+      <Router>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<Home />} />
+          <Route path="/callback" element={<AuthCallback />} />
+          
+          {/* Protected routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              
+              {/* Contacts routes */}
+              <Route path="/contacts" element={<Contacts />} />
+              <Route path="/contacts/:id" element={<ContactDetail />} />
+              
+              {/* Companies routes */}
+              <Route path="/companies" element={<Companies />} />
+              <Route path="/companies/:id" element={<CompanyDetail />} />
+              
+              {/* Projects routes */}
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              
+              {/* Conversations routes */}
+              <Route path="/conversations" element={<Conversations />} />
+              <Route path="/conversations/:id" element={<ConversationDetail />} />
+              
+              {/* Other routes */}
+              <Route path="/meetings" element={<Meetings />} />
+              <Route path="/sales-flows" element={<SalesFlows />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
           </Route>
-        </Route>
-        
-        {/* Handled by ProtectedRoute - redirects to home if not authenticated */}
-        
-        {/* 404 route */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Router>
+          
+          {/* Handled by ProtectedRoute - redirects to home if not authenticated */}
+          
+          {/* 404 route */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Router>
+    </NotificationProvider>
   );
 }
 
