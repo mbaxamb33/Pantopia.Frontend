@@ -1,6 +1,7 @@
 // src/api/index.js
 import apiClient, { apiService } from './apiClient';
 import contactsService from './contactsService';
+import { conversationsService } from './conversationsService';  // Change this import
 
 // Create a placeholder service for other entity types that will be fully implemented later
 const createPlaceholderService = (basePath) => ({
@@ -60,7 +61,7 @@ const createPlaceholderService = (basePath) => ({
 // Placeholder services for other entities
 const companiesService = createPlaceholderService('companies');
 const projectsService = createPlaceholderService('projects');
-const conversationsService = createPlaceholderService('conversations');
+// const conversationsService = createPlaceholderService('conversations');  // Comment this out
 const meetingsService = createPlaceholderService('meeting-records');
 const salesFlowsService = createPlaceholderService('sales-flows');
 
@@ -87,84 +88,6 @@ const authService = {
   }
 };
 
-// Agent settings service
-const agentSettingsService = {
-  getAgentSettings: async (pageId = 1, pageSize = 10) => {
-    try {
-      const response = await apiClient.get('/agent-settings', { 
-        params: { page_id: pageId, page_size: pageSize }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching agent settings:', error);
-      throw error;
-    }
-  },
-  
-  getAgentSettingById: async (id) => {
-    try {
-      const response = await apiClient.get(`/agent-settings/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching agent setting ${id}:`, error);
-      throw error;
-    }
-  },
-  
-  getAgentSettingByType: async (agentType) => {
-    try {
-      const response = await apiClient.get(`/agent-settings/type/${agentType}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching agent setting for type ${agentType}:`, error);
-      throw error;
-    }
-  },
-  
-  createAgentSetting: async (settingData) => {
-    try {
-      const response = await apiClient.post('/agent-settings', settingData);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating agent setting:', error);
-      throw error;
-    }
-  },
-  
-  updateAgentSetting: async (agentType, settingData) => {
-    try {
-      const response = await apiClient.put(`/agent-settings/type/${agentType}`, settingData);
-      return response.data;
-    } catch (error) {
-      console.error(`Error updating agent setting for type ${agentType}:`, error);
-      throw error;
-    }
-  },
-  
-  toggleAgent: async (agentId, isActive) => {
-    try {
-      const response = await apiClient.post('/agents/toggle', { agent_id: agentId, is_active: isActive });
-      return response.data;
-    } catch (error) {
-      console.error(`Error toggling agent ${agentId}:`, error);
-      throw error;
-    }
-  },
-  
-  testAgentEmail: async (agentId, emailData) => {
-    try {
-      const response = await apiClient.post('/agents/test-email', {
-        agent_id: agentId,
-        ...emailData
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error testing agent email for agent ${agentId}:`, error);
-      throw error;
-    }
-  }
-};
-
 // Health check function
 const healthCheck = async () => {
   try {
@@ -186,6 +109,5 @@ export {
   meetingsService,
   salesFlowsService,
   authService,
-  agentSettingsService,
   healthCheck
 };
