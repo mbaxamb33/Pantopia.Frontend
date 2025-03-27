@@ -4,6 +4,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuth } from './context/AuthContext';
 import { setupInterceptors } from './api/apiClient';
 
+
+import CompanyDetail from './pages/companies/CompanyDetail';
+import ProjectDetail from './pages/projects/ProjectDetail';
+import ConversationDetail from './pages/conversations/ConversationDetail';
 // Layout & Protected Route
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';

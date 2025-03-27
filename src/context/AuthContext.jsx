@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
@@ -15,9 +14,23 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       try {
         if (accessToken) {
-          // You could validate the token here with your backend or just decode it
-          const userData = decodeToken(idToken || accessToken);
-          setCurrentUser(userData);
+          // Validate the token by fetching user info
+          const response = await fetch('http://localhost:8080/users/me', {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+
+          if (response.ok) {
+            const userData = await response.json();
+            setCurrentUser(userData);
+          } else {
+            // If fetching user info fails, try to refresh the token
+            const newToken = await refreshAccessToken();
+            if (!newToken) {
+              logout();
+            }
+          }
         }
       } catch (error) {
         console.error('Authentication error:', error);
@@ -28,20 +41,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     checkAuth();
-  }, [accessToken, idToken]);
-
-  // A simple function to decode JWT tokens
-  const decodeToken = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(window.atob(base64));
-      return payload;
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return null;
-    }
-  };
+  }, [accessToken]);
 
   // Function to initiate AWS Cognito login
   const login = () => {
@@ -67,6 +67,12 @@ export const AuthProvider = ({ children }) => {
   const handleAuthCallback = (tokens) => {
     const { access_token, refresh_token, id_token } = tokens;
 
+    console.log('Received tokens:', { 
+      access_token: access_token ? 'Present' : 'Missing', 
+      refresh_token: refresh_token ? 'Present' : 'Missing', 
+      id_token: id_token ? 'Present' : 'Missing' 
+    });
+
     if (access_token) {
       localStorage.setItem('accessToken', access_token);
       setAccessToken(access_token);
@@ -80,9 +86,27 @@ export const AuthProvider = ({ children }) => {
     if (id_token) {
       localStorage.setItem('idToken', id_token);
       setIdToken(id_token);
-      const userData = decodeToken(id_token);
-      setCurrentUser(userData);
     }
+
+    // Attempt to fetch user info to confirm authentication
+    fetch('http://localhost:8080/users/me', {
+      headers: {
+        'Authorization': `Bearer ${access_token}`
+      }
+    })
+    .then(response => {
+      if (response.ok) {
+        return response.json();
+      }
+      throw new Error('Failed to fetch user info');
+    })
+    .then(userData => {
+      setCurrentUser(userData);
+    })
+    .catch(error => {
+      console.error('Error fetching user info:', error);
+      logout();
+    });
   };
 
   // Function to refresh tokens
@@ -102,6 +126,11 @@ export const AuthProvider = ({ children }) => {
 
       const data = await response.json();
       
+      console.log('Refresh token response:', { 
+        access_token: data.access_token ? 'Present' : 'Missing', 
+        id_token: data.id_token ? 'Present' : 'Missing' 
+      });
+
       if (data.access_token) {
         localStorage.setItem('accessToken', data.access_token);
         setAccessToken(data.access_token);
@@ -130,6 +159,8 @@ export const AuthProvider = ({ children }) => {
     handleAuthCallback,
     refreshAccessToken,
     isAuthenticated: !!currentUser,
+    tokenExpiry: null, // Add this if you want to use TokenStatus component
+    isTokenExpired: () => false, // Add this if you want to use TokenStatus component
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
