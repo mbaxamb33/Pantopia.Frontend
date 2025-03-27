@@ -13,7 +13,6 @@ import Home from './pages/Home';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import Contacts from './pages/Contacts';
-import ContactDetail from './pages/contacts/ContactDetail';
 import Companies from './pages/Companies';
 import Projects from './pages/Projects';
 import Conversations from './pages/Conversations';
@@ -21,6 +20,12 @@ import Meetings from './pages/Meetings';
 import SalesFlows from './pages/SalesFlows';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
+
+// Entity Detail Pages
+import ContactDetail from './pages/contacts/ContactDetail';
+// import CompanyDetail from './pages/companies/CompanyDetail';
+// import ProjectDetail from './pages/projects/ProjectDetail';
+// import ConversationDetail from './pages/conversations/ConversationDetail';
 
 // Notification Context
 import { NotificationProvider } from './context/NotificationContext';
@@ -66,12 +71,15 @@ function App() {
               
               {/* Companies routes */}
               <Route path="/companies" element={<Companies />} />
+              <Route path="/companies/:id" element={<CompanyDetail />} />
               
               {/* Projects routes */}
               <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
               
               {/* Conversations routes */}
               <Route path="/conversations" element={<Conversations />} />
+              <Route path="/conversations/:id" element={<ConversationDetail />} />
               
               {/* Other routes */}
               <Route path="/meetings" element={<Meetings />} />
@@ -79,6 +87,8 @@ function App() {
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
+          
+          {/* Handled by ProtectedRoute - redirects to home if not authenticated */}
           
           {/* 404 route */}
           <Route path="*" element={<NotFound />} />

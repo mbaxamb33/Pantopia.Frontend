@@ -1,11 +1,12 @@
 // src/api/contactsService.js
-import { apiService } from './apiClient';
+import apiClient, { apiService } from './apiClient';
 
 export const contactsService = {
   // Fetch list of contacts with pagination and filtering
   getContacts: async (pageId = 1, pageSize = 10) => {
     try {
-      return await apiService.get('/contacts', { page_id: pageId, page_size: pageSize });
+      const response = await apiClient.get(`/contacts?page_id=${pageId}&page_size=${pageSize}`);
+      return response.data;
     } catch (error) {
       console.error('Error fetching contacts:', error);
       throw error;
@@ -15,7 +16,8 @@ export const contactsService = {
   // Get a single contact by ID
   getContact: async (id) => {
     try {
-      return await apiService.get(`/contacts/${id}`);
+      const response = await apiClient.get(`/contacts/${id}`);
+      return response.data;
     } catch (error) {
       console.error(`Error fetching contact ${id}:`, error);
       throw error;
@@ -36,7 +38,8 @@ export const contactsService = {
         address: contactData.address
       };
       
-      return await apiService.post('/contacts', formattedData);
+      const response = await apiClient.post('/contacts', formattedData);
+      return response.data;
     } catch (error) {
       console.error('Error creating contact:', error);
       throw error;
@@ -58,7 +61,8 @@ export const contactsService = {
         address: contactData.address
       };
       
-      return await apiService.put(`/contacts/${id}`, updateData);
+      const response = await apiClient.put(`/contacts/${id}`, updateData);
+      return response.data;
     } catch (error) {
       console.error(`Error updating contact ${id}:`, error);
       throw error;
@@ -68,7 +72,8 @@ export const contactsService = {
   // Delete a contact
   deleteContact: async (id) => {
     try {
-      return await apiService.delete(`/contacts/${id}`);
+      const response = await apiClient.delete(`/contacts/${id}`);
+      return response.data;
     } catch (error) {
       console.error(`Error deleting contact ${id}:`, error);
       throw error;
@@ -78,11 +83,14 @@ export const contactsService = {
   // Search contacts
   searchContacts: async (query, pageId = 1, pageSize = 10) => {
     try {
-      return await apiService.get('/contacts', { 
-        q: query,
-        page_id: pageId, 
-        page_size: pageSize 
+      const response = await apiClient.get('/contacts', { 
+        params: {
+          q: query,
+          page_id: pageId, 
+          page_size: pageSize 
+        }
       });
+      return response.data;
     } catch (error) {
       console.error(`Error searching contacts:`, error);
       throw error;
@@ -92,10 +100,13 @@ export const contactsService = {
   // Get contacts by company
   getContactsByCompany: async (companyId, pageId = 1, pageSize = 10) => {
     try {
-      return await apiService.get(`/companies/${companyId}/contacts`, {
-        page_id: pageId,
-        page_size: pageSize
+      const response = await apiClient.get(`/companies/${companyId}/contacts`, {
+        params: {
+          page_id: pageId,
+          page_size: pageSize
+        }
       });
+      return response.data;
     } catch (error) {
       console.error(`Error fetching contacts for company ${companyId}:`, error);
       throw error;
@@ -105,7 +116,8 @@ export const contactsService = {
   // Get all tags for a contact
   getContactTags: async (contactId) => {
     try {
-      return await apiService.get(`/contacts/${contactId}/tags`);
+      const response = await apiClient.get(`/contacts/${contactId}/tags`);
+      return response.data;
     } catch (error) {
       console.error(`Error fetching tags for contact ${contactId}:`, error);
       throw error;
@@ -116,11 +128,14 @@ export const contactsService = {
   getRecentContacts: async (limit = 5) => {
     try {
       // This might need adjustment based on your actual API endpoint
-      return await apiService.get('/contacts', { 
-        sort: 'updated_at',
-        order: 'desc',
-        limit
+      const response = await apiClient.get('/contacts', { 
+        params: {
+          sort: 'updated_at',
+          order: 'desc',
+          limit
+        }
       });
+      return response.data;
     } catch (error) {
       console.error(`Error fetching recent contacts:`, error);
       throw error;

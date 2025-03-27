@@ -10,6 +10,29 @@ const apiClient = axios.create({
   timeout: 15000, // 15 seconds timeout
 });
 
+// Helper function to handle API responses
+export const handleApiResponse = (response) => {
+  if (response.data) {
+    return response.data;
+  }
+  return response;
+};
+
+// Helper function to handle API errors
+export const handleApiError = (error) => {
+  // Log the error for debugging
+  console.error('API Error:', error);
+  
+  // Create a standardized error object
+  const errorResponse = {
+    status: error.response?.status || 500,
+    message: error.response?.data?.error || error.message || 'An unknown error occurred',
+    details: error.response?.data?.details || {},
+  };
+  
+  throw errorResponse;
+};
+
 // Add auth interceptor to dynamically add the auth token to requests
 export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) => {
   // Request interceptor
@@ -66,25 +89,6 @@ export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) =>
   );
 };
 
-// Helper function to handle API responses
-export const handleApiResponse = (response) => {
-  if (response.data) {
-    return response.data;
-  }
-  return response;
-};
-
-// Helper function to handle API errors
-export const handleApiError = (error) => {
-  // Log the error for debugging
-  console.error('API Error:', error);
-  
-  // Create a standardized error object
-  const errorResponse = {
-    status: error.response?.status || 500,
-    message: error.response?.data?.error || error.message || 'An unknown error occurred',
-    details: error.response?.data?.details || {},
-  };
-  
-  throw errorResponse;
-};
+// Export as both default and named export for flexibility
+export default apiClient;
+export const apiService = apiClient;
