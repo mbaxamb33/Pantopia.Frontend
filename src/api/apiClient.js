@@ -7,6 +7,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15000, // 15 seconds timeout
 });
 
 // Add auth interceptor to dynamically add the auth token to requests
@@ -46,19 +47,44 @@ export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) =>
           const newToken = await refreshAccessToken();
           
           if (newToken) {
+            // Update the request with the new token
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            // Retry the request with the new token
             return apiClient(originalRequest);
           }
         } catch (refreshError) {
           // If refresh fails, log the user out
+          console.error('Token refresh failed:', refreshError);
           logout();
           return Promise.reject(refreshError);
         }
       }
       
+      // Return the original error for all other cases
       return Promise.reject(error);
     }
   );
 };
 
-export default apiClient;
+// Helper function to handle API responses
+export const handleApiResponse = (response) => {
+  if (response.data) {
+    return response.data;
+  }
+  return response;
+};
+
+// Helper function to handle API errors
+export const handleApiError = (error) => {
+  // Log the error for debugging
+  console.error('API Error:', error);
+  
+  // Create a standardized error object
+  const errorResponse = {
+    status: error.response?.status || 500,
+    message: error.response?.data?.error || error.message || 'An unknown error occurred',
+    details: error.response?.data?.details || {},
+  };
+  
+  throw errorResponse;
+};

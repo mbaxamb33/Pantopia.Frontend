@@ -35,17 +35,17 @@ const ContactDetail = () => {
       setError(null);
       
       try {
-        const response = await contactsService.getContact(id);
-        setContact(response);
+        const data = await contactsService.getContact(id);
+        setContact(data);
         
         // Initialize edit form with current values
         setEditContact({
-          first_name: response.first_name?.Valid ? response.first_name.String : '',
-          last_name: response.last_name?.Valid ? response.last_name.String : '',
-          email: response.email?.Valid ? response.email.String : '',
-          phone: response.phone?.Valid ? response.phone.String : '',
-          company_name: response.company_name?.Valid ? response.company_name.String : '',
-          address: response.address?.Valid ? response.address.String : ''
+          first_name: data.first_name?.Valid ? data.first_name.String : '',
+          last_name: data.last_name?.Valid ? data.last_name.String : '',
+          email: data.email?.Valid ? data.email.String : '',
+          phone: data.phone?.Valid ? data.phone.String : '',
+          company_name: data.company_name?.Valid ? data.company_name.String : '',
+          address: data.address?.Valid ? data.address.String : ''
         });
       } catch (err) {
         console.error(`Error fetching contact ${id}:`, err);
@@ -90,6 +90,7 @@ const ContactDetail = () => {
       const updatedContact = await contactsService.updateContact(id, contactData);
       setContact(updatedContact);
       setShowEdit(false);
+      navigate(`/contacts/${id}`);
       notification.showSuccess('Success', 'Contact updated successfully');
     } catch (err) {
       console.error(`Error updating contact ${id}:`, err);
@@ -107,6 +108,21 @@ const ContactDetail = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setEditContact({ ...editContact, [name]: value });
+  };
+
+  const handleStartConversation = () => {
+    // Navigate to the conversations page with the selected contact
+    navigate(`/conversations?action=new&contact_id=${id}`);
+  };
+
+  const handleScheduleMeeting = () => {
+    // Navigate to the meetings page with the selected contact
+    navigate(`/meetings?action=new&contact_id=${id}`);
+  };
+
+  const handleAddToProject = () => {
+    // Navigate to the projects page with add contact action
+    navigate(`/projects?action=add_contact&contact_id=${id}`);
   };
 
   if (isLoading && !contact) {
@@ -150,18 +166,18 @@ const ContactDetail = () => {
   const fullName = `${contact.first_name?.Valid ? contact.first_name.String : ''} ${contact.last_name?.Valid ? contact.last_name.String : ''}`.trim();
 
   return (
-    <div>
+    <div className="space-y-6">
       {isLoading && <Spinner fullPage />}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">{fullName}</h1>
           {contact.company_name?.Valid && (
             <p className="text-gray-600">{contact.company_name.String}</p>
           )}
         </div>
-        <div className="space-x-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setShowEdit(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -184,42 +200,86 @@ const ContactDetail = () => {
       </div>
 
       {/* Contact Details */}
-      <div className="bg-white rounded shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Contact Information</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Email</label>
-                <div className="mt-1">{contact.email?.Valid ? contact.email.String : '-'}</div>
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Contact Information</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Email</label>
+                  <div className="mt-1">{contact.email?.Valid ? contact.email.String : '-'}</div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Phone</label>
+                  <div className="mt-1">{contact.phone?.Valid ? contact.phone.String : '-'}</div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Company</label>
+                  <div className="mt-1">{contact.company_name?.Valid ? contact.company_name.String : '-'}</div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Phone</label>
-                <div className="mt-1">{contact.phone?.Valid ? contact.phone.String : '-'}</div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Company</label>
-                <div className="mt-1">{contact.company_name?.Valid ? contact.company_name.String : '-'}</div>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Additional Information</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Address</label>
+                  <div className="mt-1">{contact.address?.Valid ? contact.address.String : '-'}</div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Created</label>
+                  <div className="mt-1">{new Date(contact.created_at).toLocaleDateString()}</div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Updated</label>
+                  <div className="mt-1">{new Date(contact.updated_at).toLocaleDateString()}</div>
+                </div>
               </div>
             </div>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Additional Information</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Address</label>
-                <div className="mt-1">{contact.address?.Valid ? contact.address.String : '-'}</div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Created</label>
-                <div className="mt-1">{new Date(contact.created_at).toLocaleDateString()}</div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Updated</label>
-                <div className="mt-1">{new Date(contact.updated_at).toLocaleDateString()}</div>
-              </div>
-            </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-gray-50 px-6 py-4 border-t">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Quick Actions</h3>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={handleStartConversation}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Start Conversation
+            </button>
+            <button 
+              onClick={handleScheduleMeeting}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Schedule Meeting
+            </button>
+            <button 
+              onClick={handleAddToProject}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Add to Project
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Recent Activity or Related Information Placeholder */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
+        <div className="p-4 border border-gray-200 rounded bg-gray-50 text-gray-500 text-center">
+          Recent activity with this contact will appear here once available.
         </div>
       </div>
 

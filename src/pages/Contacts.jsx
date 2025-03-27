@@ -1,27 +1,34 @@
 // src/pages/Contacts.jsx
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { contactsService } from '../api';
 import { useNotification } from '../context/NotificationContext';
-import Modal from '../components/ui/Modal';
 import Spinner from '../components/ui/Spinner';
+import Modal from '../components/ui/Modal';
 
 const Contacts = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const showAddModal = searchParams.get('action') === 'new';
+
   const [contacts, setContacts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(showAddModal);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalContacts, setTotalContacts] = useState(0);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedContact, setSelectedContact] = useState(null);
+  
+  // New contact form state
   const [newContact, setNewContact] = useState({
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
-    company_name: ''
+    company_name: '',
+    address: ''
   });
   
   const notification = useNotification();
@@ -33,19 +40,39 @@ const Contacts = () => {
       setError(null);
       
       try {
+        // Call the actual API service
         const response = await contactsService.getContacts(page, pageSize);
-        setContacts(response.data || []);
-        setTotalContacts(response.total || 0);
+        
+        // Check if the response has the expected structure
+        if (Array.isArray(response)) {
+          setContacts(response);
+          // Since the API doesn't return a total count, we'll estimate based on the current page
+          setTotalContacts(response.length < pageSize ? (page - 1) * pageSize + response.length : page * pageSize + 1);
+        } else if (response.data && Array.isArray(response.data)) {
+          setContacts(response.data);
+          setTotalContacts(response.total || response.data.length);
+        } else {
+          // Fallback to mock data for development
+          const mockData = [
+            { id: 1, first_name: { String: 'John', Valid: true }, last_name: { String: 'Doe', Valid: true }, email: { String: 'john@example.com', Valid: true }, phone: { String: '555-1234', Valid: true }, company_name: { String: 'Acme Inc', Valid: true } },
+            { id: 2, first_name: { String: 'Jane', Valid: true }, last_name: { String: 'Smith', Valid: true }, email: { String: 'jane@example.com', Valid: true }, phone: { String: '555-5678', Valid: true }, company_name: { String: 'XYZ Corp', Valid: true } },
+          ];
+          setContacts(mockData);
+          setTotalContacts(mockData.length);
+          console.warn('Unexpected API response format, using mock data');
+        }
       } catch (err) {
         console.error('Error fetching contacts:', err);
         setError('Failed to load contacts. Please try again later.');
         notification.showError('Error', 'Failed to load contacts. Please try again later.');
         
-        // For demo, set fake data
-        setContacts([
+        // For development, set some mock data
+        const mockData = [
           { id: 1, first_name: { String: 'John', Valid: true }, last_name: { String: 'Doe', Valid: true }, email: { String: 'john@example.com', Valid: true }, phone: { String: '555-1234', Valid: true }, company_name: { String: 'Acme Inc', Valid: true } },
           { id: 2, first_name: { String: 'Jane', Valid: true }, last_name: { String: 'Smith', Valid: true }, email: { String: 'jane@example.com', Valid: true }, phone: { String: '555-5678', Valid: true }, company_name: { String: 'XYZ Corp', Valid: true } },
-        ]);
+        ];
+        setContacts(mockData);
+        setTotalContacts(mockData.length);
       } finally {
         setIsLoading(false);
       }
@@ -60,20 +87,29 @@ const Contacts = () => {
     try {
       setIsLoading(true);
       
-      const contactData = {
-        first_name: newContact.first_name,
-        last_name: newContact.last_name,
-        email: newContact.email,
-        phone: newContact.phone,
-        company_name: newContact.company_name
-      };
+      // Call the API to create the contact
+      const response = await contactsService.createContact(newContact);
       
-      const response = await contactsService.createContact(contactData);
+      // Refresh the contacts list
+      const updatedContacts = await contactsService.getContacts(page, pageSize);
+      setContacts(Array.isArray(updatedContacts) ? updatedContacts : updatedContacts.data || []);
       
-      // Add new contact to the list
-      setContacts([...contacts, response]);
+      // Reset form and close modal
+      setNewContact({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        company_name: '',
+        address: ''
+      });
       setShowAddForm(false);
-      setNewContact({ first_name: '', last_name: '', email: '', phone: '', company_name: '' });
+      
+      // Clear 'new' from URL if it was there
+      if (showAddModal) {
+        navigate('/contacts');
+      }
+      
       notification.showSuccess('Success', 'Contact added successfully');
     } catch (err) {
       console.error('Error adding contact:', err);
@@ -83,22 +119,22 @@ const Contacts = () => {
     }
   };
 
-  const handleOpenDeleteModal = (contact) => {
-    setSelectedContact(contact);
-    setShowDeleteModal(true);
-  };
-
   const handleDeleteContact = async () => {
     if (!selectedContact) return;
     
     try {
       setIsLoading(true);
+      
+      // Call the API to delete the contact
       await contactsService.deleteContact(selectedContact.id);
       
-      // Remove contact from the list
+      // Remove contact from list
       setContacts(contacts.filter(c => c.id !== selectedContact.id));
+      
+      // Close modal
       setShowDeleteModal(false);
       setSelectedContact(null);
+      
       notification.showSuccess('Success', 'Contact deleted successfully');
     } catch (err) {
       console.error('Error deleting contact:', err);
@@ -106,6 +142,11 @@ const Contacts = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenDeleteModal = (contact) => {
+    setSelectedContact(contact);
+    setShowDeleteModal(true);
   };
 
   const handleInputChange = (e) => {
@@ -263,7 +304,7 @@ const Contacts = () => {
                   </button>
                   
                   {/* Page numbers */}
-                  {[...Array(totalPages).keys()].map((number) => (
+                  {[...Array(totalPages).keys()].slice(0, 5).map((number) => (
                     <button
                       key={number + 1}
                       onClick={() => setPage(number + 1)}
@@ -299,7 +340,10 @@ const Contacts = () => {
       {/* Add Contact Modal */}
       <Modal
         isOpen={showAddForm}
-        onClose={() => setShowAddForm(false)}
+        onClose={() => {
+          setShowAddForm(false);
+          if (showAddModal) navigate('/contacts');
+        }}
         title="Add New Contact"
         size="lg"
       >
@@ -357,11 +401,24 @@ const Contacts = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <input
+                type="text"
+                name="address"
+                value={newContact.address}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
           <div className="mt-6 flex justify-end">
             <button
               type="button"
-              onClick={() => setShowAddForm(false)}
+              onClick={() => {
+                setShowAddForm(false);
+                if (showAddModal) navigate('/contacts');
+              }}
               className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
             >
               Cancel
@@ -409,6 +466,9 @@ const Contacts = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Loading overlay */}
+      {isLoading && <Spinner fullPage />}
     </div>
   );
 };
