@@ -105,6 +105,7 @@ export {
   contactsService,
   companiesService,
   projectsService,
+  agentService,
   conversationsService,
   meetingsService,
   salesFlowsService,

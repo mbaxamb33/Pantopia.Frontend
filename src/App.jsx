@@ -25,6 +25,11 @@ import SalesFlows from './pages/SalesFlows';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
+import Agents from './pages/Agents';
+import AgentDetail from './pages/agents/AgentDetail';
+import AgentEdit from './pages/agents/AgentEdit';
+
+
 // Entity Detail Pages
 import ContactDetail from './pages/contacts/ContactDetail';
 // import CompanyDetail from './pages/companies/CompanyDetail';
@@ -68,7 +73,12 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              
+
+
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/agents/:id" element={<AgentDetail />} />
+              <Route path="/agents/:id/edit" element={<AgentEdit />} />
+
               {/* Contacts routes */}
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/contacts/:id" element={<ContactDetail />} />

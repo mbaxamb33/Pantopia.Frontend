@@ -60,6 +60,7 @@ const Layout = () => {
         <nav className="mt-8">
           <NavItem to="/dashboard" icon="📊" label="Dashboard" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/contacts" icon="👥" label="Contacts" isSidebarOpen={isSidebarOpen} />
+          <NavItem to="/agents" icon="🤖" label="Agents" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/companies" icon="🏢" label="Companies" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/projects" icon="📁" label="Projects" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/conversations" icon="💬" label="Conversations" isSidebarOpen={isSidebarOpen} />
