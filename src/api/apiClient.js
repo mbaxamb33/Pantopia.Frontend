@@ -1,13 +1,21 @@
-// src/api/apiClient.js
+// src/api/apiClient.js - Updated with better auth handling
 import axios from 'axios';
 
 // Create an axios instance with default config
 const apiClient = axios.create({
-  baseURL: '/api', // This will use the proxy from vite.config.js
+  baseURL: 'http://localhost:8080', // Update this to match your backend URL
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 15000, // 15 seconds timeout
+});
+
+// Display full request URL for debugging
+apiClient.interceptors.request.use(config => {
+  const fullUrl = `${config.baseURL}${config.url}`;
+  console.log('🔍 Full Request URL:', fullUrl);
+  console.log('📝 Request Payload:', config.data);
+  return config;
 });
 
 // Helper function to handle API responses
@@ -52,7 +60,8 @@ export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) =>
       const isAuthRelatedEndpoint = 
         config.url.includes('/login') || 
         config.url.includes('/signup') || 
-        config.url.includes('/refresh-token');
+        config.url.includes('/refresh-token') || 
+        config.url.includes('/callback');
 
       if (isAuthRelatedEndpoint) {
         console.log('Skipping token for auth-related endpoint');
@@ -94,6 +103,7 @@ export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) =>
       console.group('✅ API Response');
       console.log('URL:', response.config.url);
       console.log('Status:', response.status);
+      console.log('Response Data:', response.data);
       console.groupEnd();
       return response;
     },
@@ -104,6 +114,10 @@ export const setupInterceptors = (getAccessToken, refreshAccessToken, logout) =>
         url: error.config?.url,
         method: error.config?.method
       });
+
+      if (error.response?.data) {
+        console.log('Error Response Data:', error.response.data);
+      }
 
       const originalRequest = error.config;
       

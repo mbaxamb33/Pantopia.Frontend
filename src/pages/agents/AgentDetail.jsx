@@ -1,10 +1,27 @@
 // src/pages/agents/AgentDetail.jsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { agentService } from '../../api/agentService';
 import { useNotification } from '../../context/NotificationContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import MockEmailTester from '../../components/agents/MockEmailTester';
+import AgentActionsList from '../../components/agents/AgentActionsList';
+
+// Helper function to extract values from SQL.NullString objects
+const extractString = (nullableField) => {
+  if (!nullableField) return '';
+  if (typeof nullableField === 'string') return nullableField;
+  if (nullableField.Valid && nullableField.String) return nullableField.String;
+  return '';
+};
+
+// Helper to extract boolean values
+const extractBool = (nullableBool) => {
+  if (nullableBool === null || nullableBool === undefined) return false;
+  if (typeof nullableBool === 'boolean') return nullableBool;
+  if (nullableBool.Valid) return nullableBool.Bool;
+  return false;
+};
 
 const AgentDetail = () => {
   const { id } = useParams();
@@ -14,17 +31,9 @@ const AgentDetail = () => {
   const [agent, setAgent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showTestModal, setShowTestModal] = useState(false);
-  const [testEmail, setTestEmail] = useState({
-    fromEmail: '',
-    subject: 'Test Email',
-    emailBody: 'Hello, this is a test email to check how the agent responds.',
-    simulateNow: true
-  });
-  const [testResponse, setTestResponse] = useState(null);
-  const [isTestingAgent, setIsTestingAgent] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  
+  const [actionsRefreshTrigger, setActionsRefreshTrigger] = useState(0);
+
   // Fetch agent details
   useEffect(() => {
     const fetchAgentDetails = async () => {
@@ -32,8 +41,12 @@ const AgentDetail = () => {
       setError(null);
       
       try {
-        const data = await agentService.getAgentSetting(id);
-        setAgent(data);
+        // Import apiClient
+        const apiClient = (await import('../../api/apiClient')).default;
+        
+        // Fetch agent details
+        const response = await apiClient.get(`/agent-settings/${id}`);
+        setAgent(response.data);
       } catch (err) {
         console.error(`Error fetching agent ${id}:`, err);
         setError('Failed to load agent details. Please try again later.');
@@ -76,7 +89,7 @@ const AgentDetail = () => {
 
     fetchAgentDetails();
   }, [id, notification]);
-  
+
   const handleToggleAgent = async () => {
     if (!agent) return;
     
@@ -84,13 +97,19 @@ const AgentDetail = () => {
       setIsLoading(true);
       
       // Get current status
-      const currentStatus = agent.is_active?.Bool || false;
+      const currentStatus = extractBool(agent.is_active);
+      
+      // Import apiClient
+      const apiClient = (await import('../../api/apiClient')).default;
       
       // Call API to toggle agent
-      const updatedAgent = await agentService.toggleAgent(agent.id, !currentStatus);
+      const response = await apiClient.post('/agents/toggle', {
+        agent_id: agent.id,
+        is_active: !currentStatus
+      });
       
       // Update agent state
-      setAgent(updatedAgent);
+      setAgent(response.data);
       
       // Show notification
       notification.showSuccess('Success', `Agent ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
@@ -108,8 +127,11 @@ const AgentDetail = () => {
     try {
       setIsLoading(true);
       
+      // Import apiClient
+      const apiClient = (await import('../../api/apiClient')).default;
+      
       // Call the API to delete the agent
-      await agentService.deleteAgentSetting(agent.id);
+      await apiClient.delete(`/agent-settings/${agent.id}`);
       
       // Show notification
       notification.showSuccess('Success', 'Agent deleted successfully');
@@ -121,33 +143,6 @@ const AgentDetail = () => {
       notification.showError('Error', 'Failed to delete agent. Please try again.');
       setIsLoading(false);
     }
-  };
-  
-  const handleTestAgent = async (e) => {
-    e.preventDefault();
-    
-    if (!agent) return;
-    
-    try {
-      setIsTestingAgent(true);
-      
-      // Call the API to test the agent
-      const response = await agentService.testAgent(agent.id, testEmail);
-      
-      // Store the response
-      setTestResponse(response);
-      
-    } catch (err) {
-      console.error('Error testing agent:', err);
-      notification.showError('Error', 'Failed to test agent. Please try again.');
-    } finally {
-      setIsTestingAgent(false);
-    }
-  };
-  
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setTestEmail({ ...testEmail, [name]: value });
   };
   
   // Get agent type display name
@@ -200,6 +195,13 @@ const AgentDetail = () => {
     );
   }
   
+  // Safely extract values from nullable fields
+  const agentName = extractString(agent.name);
+  const agentType = extractString(agent.agent_type);
+  const isActive = extractBool(agent.is_active);
+  const requiresApproval = extractBool(agent.approval_required);
+  const signature = extractString(agent.signature);
+  
   return (
     <div className="space-y-6">
       {isLoading && <Spinner fullPage />}
@@ -207,16 +209,15 @@ const AgentDetail = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Agent: {agent.name}</h1>
-          <p className="text-gray-600">{getAgentTypeDisplay(agent.agent_type)}</p>
+          <h1 className="text-2xl font-bold">Agent: {agentName}</h1>
+          <p className="text-gray-600">{getAgentTypeDisplay(agentType)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setShowTestModal(true)}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-          >
-            Test Agent
-          </button>
+          <MockEmailTester 
+            agentId={agent.id} 
+            onTestComplete={() => setActionsRefreshTrigger(prev => prev + 1)}
+          />
+          
           <button
             onClick={() => navigate(`/agents/${agent.id}/edit`)}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -226,12 +227,12 @@ const AgentDetail = () => {
           <button
             onClick={handleToggleAgent}
             className={`px-4 py-2 text-white rounded ${
-              agent.is_active?.Bool 
+              isActive 
                 ? 'bg-orange-600 hover:bg-orange-700' 
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {agent.is_active?.Bool ? 'Deactivate' : 'Activate'}
+            {isActive ? 'Deactivate' : 'Activate'}
           </button>
           <button
             onClick={() => setShowDeleteModal(true)}
@@ -259,11 +260,11 @@ const AgentDetail = () => {
                   <label className="block text-sm font-medium text-gray-500">Status</label>
                   <div className="mt-1">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      agent.is_active?.Bool 
+                      isActive 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {agent.is_active?.Bool ? 'Active' : 'Inactive'}
+                      {isActive ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
@@ -277,7 +278,7 @@ const AgentDetail = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Approval Required</label>
-                  <div className="mt-1">{agent.approval_required?.Bool ? 'Yes' : 'No'}</div>
+                  <div className="mt-1">{requiresApproval ? 'Yes' : 'No'}</div>
                 </div>
               </div>
             </div>
@@ -378,11 +379,11 @@ const AgentDetail = () => {
           )}
           
           {/* Email Signature */}
-          {agent.signature && (
+          {signature && (
             <div className="mt-6">
               <h2 className="text-lg font-semibold mb-4">Email Signature</h2>
               <div className="bg-gray-50 p-4 rounded">
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap">{agent.signature}</pre>
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap">{signature}</pre>
               </div>
             </div>
           )}
@@ -391,164 +392,25 @@ const AgentDetail = () => {
 
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
-        <div className="p-4 border border-gray-200 rounded bg-gray-50 text-gray-500 text-center">
-          Recent agent activity will appear here.
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Recent Activity</h2>
+          <button 
+            onClick={() => setActionsRefreshTrigger(prev => prev + 1)}
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
         </div>
+        
+        <AgentActionsList 
+          agentId={id} 
+          limit={10} 
+          refreshTrigger={actionsRefreshTrigger} 
+        />
       </div>
-
-      {/* Test Agent Modal */}
-      <Modal
-        isOpen={showTestModal}
-        onClose={() => {
-          setShowTestModal(false);
-          setTestResponse(null);
-        }}
-        title="Test Agent"
-        size="lg"
-      >
-        {!testResponse ? (
-          <form onSubmit={handleTestAgent}>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
-                <input
-                  type="email"
-                  name="fromEmail"
-                  value={testEmail.fromEmail}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="customer@example.com"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <input
-                  type="text"
-                  name="subject"
-                  value={testEmail.subject}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Email subject"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Body</label>
-                <textarea
-                  name="emailBody"
-                  value={testEmail.emailBody}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="5"
-                  placeholder="Type the email body here..."
-                  required
-                ></textarea>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="simulateNow"
-                  checked={testEmail.simulateNow}
-                  onChange={(e) => setTestEmail({ ...testEmail, simulateNow: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-gray-700">Simulate immediate response (ignore working hours)</span>
-              </div>
-            </div>
-            
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowTestModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-                disabled={isTestingAgent}
-              >
-                {isTestingAgent ? 'Testing...' : 'Test Agent'}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-medium text-gray-800 mb-2">Agent Analysis</h3>
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-gray-700">{testResponse.analysis || 'No analysis provided'}</p>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="font-medium text-gray-800 mb-2">Email Response</h3>
-              <div className="bg-gray-50 p-3 rounded">
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap">{testResponse.emailResponse || 'No response generated'}</pre>
-              </div>
-            </div>
-            
-            {testResponse.actions && testResponse.actions.length > 0 && (
-              <div>
-                <h3 className="font-medium text-gray-800 mb-2">Actions Taken</h3>
-                <div className="bg-gray-50 p-3 rounded">
-                  <ul className="space-y-2">
-                    {testResponse.actions.map((action, index) => (
-                      <li key={index} className="flex items-start">
-                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded mr-2">
-                          {action.type}
-                        </span>
-                        <span className="text-gray-700">{action.reasoning}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-            
-            {testResponse.opportunities && testResponse.opportunities.length > 0 && (
-              <div>
-                <h3 className="font-medium text-gray-800 mb-2">Opportunities Identified</h3>
-                <div className="bg-gray-50 p-3 rounded">
-                  <ul className="space-y-2">
-                    {testResponse.opportunities.map((opportunity, index) => (
-                      <li key={index} className="text-gray-700">
-                        <span className="font-medium">{opportunity.type}:</span> {opportunity.description}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-            
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowTestModal(false);
-                  setTestResponse(null);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => setTestResponse(null)}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Test Again
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
 
       {/* Delete Confirmation Modal */}
       <Modal
@@ -560,7 +422,7 @@ const AgentDetail = () => {
         <div>
           <p className="text-gray-700">
             Are you sure you want to delete agent{' '}
-            <span className="font-semibold">{agent.name}</span>?
+            <span className="font-semibold">{agentName}</span>?
             This action cannot be undone.
           </p>
           <div className="mt-6 flex justify-end">

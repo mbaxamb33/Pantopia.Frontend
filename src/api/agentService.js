@@ -99,6 +99,35 @@ export const agentService = {
     }
   },
   
+  // Test agent with mock email (new method using the email testing endpoint)
+  testAgentWithMockEmail: async (agentId, emailData) => {
+    try {
+      const response = await apiClient.post('/api/test/mock-email', {
+        agent_id: agentId,
+        from_email: emailData.fromEmail,
+        to_email: emailData.toEmail || '',
+        subject: emailData.subject,
+        body: emailData.body,
+        simulate_now: emailData.simulateNow
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error testing agent with mock email ${agentId}:`, error);
+      throw error;
+    }
+  },
+  
+  // Get recent agent actions
+  getRecentAgentActions: async (agentId, limit = 10) => {
+    try {
+      const response = await apiClient.get(`/api/agents/${agentId}/recent-actions?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching recent actions for agent ${agentId}:`, error);
+      throw error;
+    }
+  },
+  
   // Get agent actions
   getAgentActions: async (filters = {}, pageId = 1, pageSize = 10) => {
     try {
