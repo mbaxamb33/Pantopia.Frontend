@@ -1,7 +1,8 @@
 // src/api/index.js
 import apiClient, { apiService } from './apiClient';
 import contactsService from './contactsService';
-import { conversationsService } from './conversationsService';  // Change this import
+import { conversationsService } from './conversationsService';
+import { agentService } from './agentService';  // Add this line
 
 // Create a placeholder service for other entity types that will be fully implemented later
 const createPlaceholderService = (basePath) => ({
