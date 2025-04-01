@@ -23,7 +23,9 @@ import Conversations from './pages/Conversations';
 import Meetings from './pages/Meetings';
 import SalesFlows from './pages/SalesFlows';
 import Settings from './pages/Settings';
+import Integrations from './pages/Integrations';
 import NotFound from './pages/NotFound';
+
 
 import Agents from './pages/Agents';
 import AgentDetail from './pages/agents/AgentDetail';
@@ -79,6 +81,11 @@ function App() {
               <Route path="/agents/:id" element={<AgentDetail />} />
               <Route path="/agents/:id/edit" element={<AgentEdit />} />
 
+
+              <Route path="/integrations" element={<Integrations />} />
+
+
+              
               {/* Contacts routes */}
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/contacts/:id" element={<ContactDetail />} />

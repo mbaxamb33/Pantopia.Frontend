@@ -2,19 +2,31 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 
 const AuthCallback = () => {
   const [error, setError] = useState('');
   const { handleAuthCallback } = useAuth();
   const navigate = useNavigate();
+  const notification = useNotification();
 
   useEffect(() => {
     const processCallback = async () => {
       try {
-        // Check if we have tokens in the URL or need to extract them from the response
+        // Log all query parameters for debugging
         const queryParams = new URLSearchParams(window.location.search);
+        console.log('Callback Query Params:', Object.fromEntries(queryParams));
+
+        // Check for Gmail-specific callback
+        if (queryParams.has('code') && queryParams.has('state')) {
+          console.log('Detected Gmail callback');
+          
+          // Redirect to integrations page with success query parameter
+          navigate('/integrations?gmail_connected=true');
+          return;
+        }
         
-        // If your backend already handles token exchange and passes tokens in query params
+        // Existing authentication logic remains the same...
         if (queryParams.has('access_token') && queryParams.has('id_token')) {
           const tokens = {
             access_token: queryParams.get('access_token'),
@@ -88,7 +100,7 @@ const AuthCallback = () => {
     };
 
     processCallback();
-  }, [handleAuthCallback, navigate]);
+  }, [handleAuthCallback, navigate, notification]);
 
   if (error) {
     return (
