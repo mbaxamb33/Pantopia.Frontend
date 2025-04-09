@@ -30,8 +30,7 @@ const Products = () => {
   const notification = useNotification();
 
   // Fetch products from API
-// Corrected useEffect hook
-useEffect(() => {
+  useEffect(() => {
     const fetchProducts = async () => {
       setIsLoading(true);
       setError(null);

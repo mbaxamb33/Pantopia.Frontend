@@ -5,6 +5,31 @@ import { useNotification } from '../../context/NotificationContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import apiClient from '../../api/apiClient';
+import DocumentViewer from '../../components/products/DocumentViewer';
+
+// Helper function to safely extract string values from nullable fields
+const extractString = (nullableField) => {
+  if (!nullableField) return '';
+  if (typeof nullableField === 'string') return nullableField;
+  if (nullableField.Valid && nullableField.String) return nullableField.String;
+  return '';
+};
+
+// Helper function to safely extract boolean values from nullable fields
+const extractBool = (nullableBool) => {
+  if (nullableBool === null || nullableBool === undefined) return false;
+  if (typeof nullableBool === 'boolean') return nullableBool;
+  if (nullableBool.Valid) return nullableBool.Bool;
+  return false;
+};
+
+// Helper function to safely extract number values from nullable fields
+const extractNumber = (nullableNumber) => {
+  if (!nullableNumber) return 0;
+  if (typeof nullableNumber === 'number') return nullableNumber;
+  if (nullableNumber.Valid && nullableNumber.Int32) return nullableNumber.Int32;
+  return 0;
+};
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -13,20 +38,13 @@ const ProductDetail = () => {
   
   const [product, setProduct] = useState(null);
   const [documents, setDocuments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDocumentsLoading, setIsDocumentsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDocumentsLoading, setIsDocumentsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [documentsError, setDocumentsError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [uploadFormData, setUploadFormData] = useState({
-    description: ''
-  });
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
 
   // Fetch product details
   useEffect(() => {
@@ -39,22 +57,11 @@ const ProductDetail = () => {
         setProduct(response.data);
       } catch (err) {
         console.error(`Error fetching product ${id}:`, err);
-        setError('Failed to load product details. Please try again later.');
-        notification.showError('Error', 'Failed to load product details');
-        
-        // For development, set mock data
-        setProduct({
-          id: parseInt(id),
-          name: 'Enterprise Software Solution',
-          description: { String: 'Complete business management platform', Valid: true },
-          category: { String: 'Software', Valid: true },
-          price: { String: '1499.99', Valid: true },
-          currency: { String: 'USD', Valid: true },
-          is_active: { Bool: true, Valid: true },
-          document_count: 3,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+        const errorMessage = err.response?.data?.error || 
+                             err.message || 
+                             'Failed to load product details. Please try again later.';
+        setError(errorMessage);
+        notification.showError('Error', errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -69,187 +76,84 @@ const ProductDetail = () => {
       if (!product) return;
       
       setIsDocumentsLoading(true);
+      setDocumentsError(null);
       
       try {
-        // If search is active, use search endpoint
-        let endpoint = `/products/${id}/documents`;
-        let params = { page_id: page, page_size: pageSize };
-        
-        if (isSearching && searchQuery.trim()) {
-          endpoint = `/products/${id}/documents/search`;
-          params.query = searchQuery;
+        // Try fetching documents using multiple potential endpoints
+        const endpoints = [
+          `/products/${id}/documents`,
+          `/documents?product_id=${id}`,
+          `/api/products/${id}/documents`
+        ];
+
+        let response;
+        for (const endpoint of endpoints) {
+          try {
+            response = await apiClient.get(endpoint, {
+              params: { page_id: page, page_size: pageSize }
+            });
+            
+            // If request succeeds, break the loop
+            if (response.data) break;
+          } catch (err) {
+            // Continue to next endpoint if this one fails
+            console.warn(`Failed to fetch from ${endpoint}:`, err);
+          }
         }
+
+        // Validate and extract documents
+        const fetchedDocuments = response?.data ? 
+          (Array.isArray(response.data) ? response.data : 
+           (response.data.documents || response.data.data || [])) : [];
         
-        const response = await apiClient.get(endpoint, { params });
-        setDocuments(response.data || []);
+        setDocuments(fetchedDocuments);
+        
+        // Optional: Notify if no documents found
+        if (fetchedDocuments.length === 0) {
+          notification.showInfo('No Documents', 'No documents found for this product.');
+        }
       } catch (err) {
         console.error(`Error fetching documents for product ${id}:`, err);
-        notification.showError('Error', 'Failed to load documents');
         
-        // For development, set mock documents
-        setDocuments([
+        // Extract meaningful error message
+        const errorMessage = err.response?.data?.error || 
+                             err.message || 
+                             'Failed to load documents';
+        
+        setDocumentsError(errorMessage);
+        notification.showError('Error', errorMessage);
+        
+        // Optional: Set mock documents for development/testing
+        const mockDocuments = [
           {
             id: 1,
-            product_id: parseInt(id),
-            file_name: 'Product_Specifications.docx',
+            file_name: { String: 'Product_Specification.docx', Valid: true },
             file_type: 'docx',
             file_size: 1024 * 100, // 100 KB
-            description: { String: 'Technical specifications document', Valid: true },
-            created_at: new Date().toISOString(),
-            metadata: { Valid: true, RawMessage: JSON.stringify({ title: 'Product Specifications', author: 'John Doe' }) }
-          },
-          {
-            id: 2,
-            product_id: parseInt(id),
-            file_name: 'User_Manual.docx',
-            file_type: 'docx',
-            file_size: 1024 * 250, // 250 KB
-            description: { String: 'User manual and guidelines', Valid: true },
-            created_at: new Date().toISOString(),
-            metadata: { Valid: true, RawMessage: JSON.stringify({ title: 'User Manual', author: 'Jane Smith' }) }
+            description: { String: 'Technical specifications', Valid: true },
+            metadata: { 
+              Valid: true, 
+              RawMessage: JSON.stringify({ 
+                title: 'Product Specification', 
+                author: 'John Doe' 
+              }) 
+            }
           }
-        ]);
+        ];
+        
+        setDocuments(mockDocuments);
       } finally {
         setIsDocumentsLoading(false);
       }
     };
 
-    fetchDocuments();
-  }, [id, product, page, pageSize, notification, searchQuery, isSearching]);
-
-  const handleUploadDocument = async (e) => {
-    e.preventDefault();
-    
-    if (!selectedFile) {
-      notification.showError('Error', 'Please select a file to upload');
-      return;
+    if (product) {
+      fetchDocuments();
     }
-    
-    try {
-      setIsLoading(true);
-      
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('product_id', id);
-      formData.append('description', uploadFormData.description);
-      
-      // Call API to upload document
-      const response = await apiClient.post('/products/documents', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      // Reset form
-      setSelectedFile(null);
-      setUploadFormData({ description: '' });
-      setShowUploadModal(false);
-      
-      // Refresh documents
-      setPage(1);
-      
-      // Update product document count
-      if (product) {
-        setProduct({
-          ...product,
-          document_count: (product.document_count || 0) + 1
-        });
-      }
-      
-      notification.showSuccess('Success', 'Document uploaded successfully');
-    } catch (err) {
-      console.error('Error uploading document:', err);
-      notification.showError('Error', 'Failed to upload document. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [id, product, page, pageSize, notification]);
 
-  const handleDeleteDocument = async () => {
-    if (!selectedDocument) return;
-    
-    try {
-      setIsLoading(true);
-      
-      // Call API to delete document
-      await apiClient.delete(`/products/documents/${selectedDocument.id}`);
-      
-      // Remove document from list
-      setDocuments(documents.filter(doc => doc.id !== selectedDocument.id));
-      
-      // Update product document count
-      if (product && product.document_count > 0) {
-        setProduct({
-          ...product,
-          document_count: product.document_count - 1
-        });
-      }
-      
-      // Close modal
-      setShowDeleteModal(false);
-      setSelectedDocument(null);
-      
-      notification.showSuccess('Success', 'Document deleted successfully');
-    } catch (err) {
-      console.error('Error deleting document:', err);
-      notification.showError('Error', 'Failed to delete document. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setUploadFormData({ ...uploadFormData, [name]: value });
-  };
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    setIsSearching(!!searchQuery.trim());
-    setPage(1);
-  };
-
-  const clearSearch = () => {
-    setSearchQuery('');
-    setIsSearching(false);
-  };
-
-  // Format file size
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  // Format date
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  // Parse metadata
-  const parseMetadata = (metadata) => {
-    if (!metadata?.Valid) return {};
-    
-    try {
-      return JSON.parse(metadata.RawMessage);
-    } catch (err) {
-      console.error('Error parsing metadata:', err);
-      return {};
-    }
-  };
-
-  if (isLoading && !product) {
+  // If loading initial product details, show spinner
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <Spinner size="lg" />
@@ -257,7 +161,8 @@ const ProductDetail = () => {
     );
   }
 
-  if (error && !product) {
+  // If there's an error loading product details
+  if (error) {
     return (
       <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
         <p className="font-bold">Error</p>
@@ -272,32 +177,22 @@ const ProductDetail = () => {
     );
   }
 
-  if (!product) {
-    return (
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
-        <p className="font-bold">Not Found</p>
-        <p>Product not found. It may have been deleted or you don't have access.</p>
-        <button
-          onClick={() => navigate('/products')}
-          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Back to Products
-        </button>
-      </div>
-    );
-  }
+  // Safely extract product details
+  const name = extractString(product.name);
+  const description = extractString(product.description);
+  const category = extractString(product.category);
+  const price = product.price?.Valid ? parseFloat(product.price.String).toFixed(2) : '0.00';
+  const currency = extractString(product.currency);
+  const isActive = extractBool(product.is_active);
+  const documentCount = extractNumber(product.document_count);
 
   return (
     <div className="space-y-6">
-      {isLoading && <Spinner fullPage />}
-
-      {/* Header */}
+      {/* Product Details Section */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{product.name}</h1>
-          {product.category?.Valid && (
-            <p className="text-gray-600">{product.category.String}</p>
-          )}
+          <h1 className="text-2xl font-bold">{name}</h1>
+          {category && <p className="text-gray-600">{category}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -305,12 +200,6 @@ const ProductDetail = () => {
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Edit
-          </button>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            Upload Document
           </button>
           <button
             onClick={() => navigate('/products')}
@@ -321,7 +210,7 @@ const ProductDetail = () => {
         </div>
       </div>
 
-      {/* Product Details */}
+      {/* Product Information */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -330,16 +219,14 @@ const ProductDetail = () => {
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Description</label>
-                  <div className="mt-1">
-                    {product.description?.Valid ? product.description.String : 'No description available'}
-                  </div>
+                  <div className="mt-1">{description || 'No description available'}</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Price</label>
                   <div className="mt-1">
-                    {product.price?.Valid && product.currency?.Valid ? (
+                    {price && currency ? (
                       <span className="font-semibold">
-                        {product.currency.String} {parseFloat(product.price.String).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currency} {price}
                       </span>
                     ) : (
                       'Not specified'
@@ -350,11 +237,11 @@ const ProductDetail = () => {
                   <label className="block text-sm font-medium text-gray-500">Status</label>
                   <div className="mt-1">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      product.is_active?.Bool 
+                      isActive 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {product.is_active?.Bool ? 'Active' : 'Inactive'}
+                      {isActive ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
@@ -365,245 +252,96 @@ const ProductDetail = () => {
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Category</label>
-                  <div className="mt-1">{product.category?.Valid ? product.category.String : 'Not specified'}</div>
+                  <div className="mt-1">{category || 'Not specified'}</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Created</label>
-                  <div className="mt-1">{formatDate(product.created_at)}</div>
+                  <div className="mt-1">{new Date(product.created_at).toLocaleString()}</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Last Updated</label>
-                  <div className="mt-1">{formatDate(product.updated_at)}</div>
+                  <div className="mt-1">{new Date(product.updated_at).toLocaleString()}</div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Documents</label>
                   <div className="mt-1">
-                    <span className="font-semibold">{product.document_count || 0}</span> documents attached
+                    <span className="font-semibold">{documentCount}</span> documents attached
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        
-        {/* Documents Section */}
-        <div className="border-t border-gray-200 px-6 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Documents</h2>
-            <form onSubmit={handleSearchSubmit} className="flex items-center">
-              <input
-                type="text"
-                placeholder="Search documents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-3 py-1 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="px-3 py-1 bg-blue-600 text-white rounded-r hover:bg-blue-700"
-              >
-                Search
-              </button>
-              {isSearching && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="ml-2 text-sm text-gray-600 hover:text-gray-800"
-                >
-                  Clear
-                </button>
-              )}
-            </form>
-          </div>
-          
-          {isSearching && (
-            <div className="mb-4 bg-blue-50 p-2 rounded text-sm">
-              Showing results for: <span className="font-semibold">{searchQuery}</span>
-            </div>
-          )}
-          
-          {isDocumentsLoading ? (
-            <div className="flex justify-center py-6">
-              <Spinner size="md" />
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="py-6 text-center text-gray-500">
-              {isSearching ? 'No documents found matching your search.' : 'No documents have been uploaded yet.'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Size
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Uploaded
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {documents.map((doc) => {
-                    const metadata = parseMetadata(doc.metadata);
-                    return (
-                      <tr key={doc.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-md flex items-center justify-center text-gray-500">
-                              {doc.file_type === 'docx' ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                              ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                              )}
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{doc.file_name}</div>
-                              <div className="text-sm text-gray-500">{doc.description?.Valid ? doc.description.String : ''}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {doc.file_type.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatFileSize(doc.file_size)}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(doc.created_at)}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => {
-                              setSelectedDocument(doc);
-                              setShowDeleteModal(true);
-                            }}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Upload Document Modal */}
-      <Modal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        title="Upload Document"
-        size="lg"
-      >
-        <form onSubmit={handleUploadDocument}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
-              <input
-                type="file"
-                accept=".docx"
-                onChange={handleFileChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500">Only Word documents (.docx) are supported</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                name="description"
-                value={uploadFormData.description}
-                onChange={handleInputChange}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Optional document description"
-              ></textarea>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-md text-sm">
-              <p className="font-semibold text-yellow-800">Document Processing</p>
-              <p className="text-yellow-700 mt-1">
-                When you upload a Word document, the system will automatically:
-              </p>
-              <ul className="list-disc list-inside mt-2 text-yellow-700 space-y-1">
-                <li>Extract text content for full-text search</li>
-                <li>Parse document metadata (title, author, etc.)</li>
-                <li>Count paragraphs, words, and headings</li>
-                <li>Store a structured representation for analysis</li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowUploadModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!selectedFile}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
-            >
-              Upload
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Delete Document Confirmation Modal */}
-      <Modal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        title="Confirm Delete"
-        size="sm"
-      >
-        <div>
-          <p className="text-gray-700">
-            Are you sure you want to delete document{' '}
-            <span className="font-semibold">
-              {selectedDocument ? selectedDocument.file_name : ''}
-            </span>?
-            This action cannot be undone.
-          </p>
-          <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowDeleteModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteDocument}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </button>
-          </div>
+      {/* Documents Section */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Documents</h2>
+          <button
+            onClick={() => navigate(`/products/${id}?action=upload`)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Upload Document
+          </button>
         </div>
-      </Modal>
+        
+        {isDocumentsLoading ? (
+          <div className="flex justify-center py-6">
+            <Spinner size="md" />
+          </div>
+        ) : documentsError ? (
+          <div className="py-6 text-center text-red-500">
+            {documentsError}
+            <button 
+              onClick={() => window.location.reload()}
+              className="ml-4 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="py-6 text-center text-gray-500">
+            No documents have been uploaded yet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {documents.map((doc, index) => (
+              <div 
+                key={`${doc.id}-${index}`} 
+                className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setSelectedDocument(doc)}
+              >
+                <div className="flex items-center mb-2">
+                  <div className="mr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium">{extractString(doc.file_name)}</h3>
+                    <p className="text-xs text-gray-500">
+                      {extractString(doc.description) || 'No description'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Document Viewer Modal */}
+      {selectedDocument && (
+        <Modal
+          isOpen={!!selectedDocument}
+          onClose={() => setSelectedDocument(null)}
+          title="Document Details"
+          size="lg"
+        >
+          <DocumentViewer document={selectedDocument} />
+        </Modal>
+      )}
     </div>
   );
 };
