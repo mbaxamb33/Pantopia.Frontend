@@ -1,15 +1,44 @@
 // src/context/NotificationContext.jsx
-import React, { createContext, useContext, useState, useCallback } from 'react';
+// This is an updated version to prevent duplicate error notifications
+
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import Notification from '../components/ui/Notification';
 
 const NotificationContext = createContext(null);
 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
+  // Track shown error messages to prevent duplicates
+  const shownErrors = useRef(new Set());
+  // Clear error set after some time to allow errors to be shown again later
+  const errorTimeoutRef = useRef(null);
 
   // Add new notification
   const addNotification = useCallback((notification) => {
     const id = Date.now().toString();
+    
+    // For error notifications, check if we've shown this message already
+    if (notification.type === 'error' && notification.message) {
+      const errorKey = `${notification.title}-${notification.message}`;
+      if (shownErrors.current.has(errorKey)) {
+        // Skip showing duplicate errors
+        console.log('Skipping duplicate error notification:', errorKey);
+        return id;
+      }
+      
+      // Add to shown errors
+      shownErrors.current.add(errorKey);
+      
+      // Clear the set after 5 seconds to allow errors to be shown again
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      
+      errorTimeoutRef.current = setTimeout(() => {
+        shownErrors.current.clear();
+      }, 5000);
+    }
+    
     setNotifications(prev => [...prev, { id, ...notification }]);
     return id;
   }, []);

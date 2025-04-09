@@ -1,33 +1,27 @@
 // src/pages/Products.jsx
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import Spinner from '../components/ui/Spinner';
 import Modal from '../components/ui/Modal';
-import apiClient from '../api/apiClient';
+import CreateProductForm from '../components/products/CreateProductForm';
+import productsService from '../api/productsService';
 
 const Products = () => {
+  const navigate = useNavigate();
+  const notification = useNotification();
+  const [searchParams] = useSearchParams();
+  const showAddModal = searchParams.get('action') === 'new';
+  
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(showAddModal);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  
-  // New product form state
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    description: '',
-    category: '',
-    price: '',
-    currency: 'USD',
-    is_active: true
-  });
-  
-  const navigate = useNavigate();
-  const notification = useNotification();
+  const [totalProducts, setTotalProducts] = useState(0);
 
   // Fetch products from API
   useEffect(() => {
@@ -36,39 +30,20 @@ const Products = () => {
       setError(null);
       
       try {
-        const response = await apiClient.get(`/products?page_id=${page}&page_size=${pageSize}`);
-        setProducts(response.data || []);
+        const data = await productsService.getProducts(page, pageSize);
+        
+        if (Array.isArray(data)) {
+          setProducts(data);
+          setTotalProducts(data.length < pageSize ? (page - 1) * pageSize + data.length : page * pageSize + 1);
+        } else {
+          setProducts([]);
+          setTotalProducts(0);
+          throw new Error('Invalid response format');
+        }
       } catch (err) {
         console.error('Error fetching products:', err);
         setError('Failed to load products. Please try again later.');
         notification.showError('Error', 'Failed to load products. Please try again later.');
-        
-        // For development, set mock data
-        const mockProducts = [
-          {
-            id: 1,
-            name: 'Enterprise Software Solution',
-            description: { String: 'Complete business management platform', Valid: true },
-            category: { String: 'Software', Valid: true },
-            price: { String: '1499.99', Valid: true },
-            currency: { String: 'USD', Valid: true },
-            is_active: { Bool: true, Valid: true },
-            document_count: 3,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 2,
-            name: 'Cloud Storage Service',
-            description: { String: 'Secure cloud storage for businesses', Valid: true },
-            category: { String: 'Service', Valid: true },
-            price: { String: '49.99', Valid: true },
-            currency: { String: 'USD', Valid: true },
-            is_active: { Bool: true, Valid: true },
-            document_count: 1,
-            created_at: new Date().toISOString()
-          }
-        ];
-        setProducts(mockProducts);
       } finally {
         setIsLoading(false);
       }
@@ -77,36 +52,18 @@ const Products = () => {
     fetchProducts();
   }, [page, pageSize, notification]);
 
-  const handleCreateProduct = async (e) => {
-    e.preventDefault();
+  const handleProductCreated = (newProduct) => {
+    // Add the new product to the list
+    setProducts(prevProducts => [newProduct, ...prevProducts]);
     
-    try {
-      setIsLoading(true);
-      
-      // Call the API to create the product
-      const response = await apiClient.post('/products', newProduct);
-      
-      // Update the products list
-      setProducts([...products, response.data]);
-      
-      // Reset form and close modal
-      setNewProduct({
-        name: '',
-        description: '',
-        category: '',
-        price: '',
-        currency: 'USD',
-        is_active: true
-      });
-      setShowAddModal(false);
-      
-      notification.showSuccess('Success', 'Product created successfully');
-    } catch (err) {
-      console.error('Error creating product:', err);
-      notification.showError('Error', 'Failed to create product. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    // Update total count
+    setTotalProducts(prevTotal => prevTotal + 1);
+    
+    // Close the form
+    setShowAddForm(false);
+    
+    // Clear search params
+    navigate('/products');
   };
 
   const handleDeleteProduct = async () => {
@@ -116,10 +73,13 @@ const Products = () => {
       setIsLoading(true);
       
       // Call the API to delete the product
-      await apiClient.delete(`/products/${selectedProduct.id}`);
+      await productsService.deleteProduct(selectedProduct.id);
       
       // Remove product from list
       setProducts(products.filter(p => p.id !== selectedProduct.id));
+      
+      // Update total count
+      setTotalProducts(prevTotal => prevTotal - 1);
       
       // Close modal
       setShowDeleteModal(false);
@@ -139,14 +99,41 @@ const Products = () => {
     setShowDeleteModal(true);
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewProduct({ ...newProduct, [name]: value });
+  // Format nullable fields from SQL
+  const formatName = (product) => product.name || '';
+  
+  const formatDescription = (product) => {
+    if (!product.description) return '';
+    return product.description.Valid ? product.description.String : '';
+  };
+  
+  const formatCategory = (product) => {
+    if (!product.category) return '';
+    return product.category.Valid ? product.category.String : '';
+  };
+  
+  const formatPrice = (product) => {
+    if (!product.price || !product.price.Valid || !product.currency || !product.currency.Valid) {
+      return '-';
+    }
+    
+    try {
+      const price = parseFloat(product.price.String);
+      return `${product.currency.String} ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } catch (err) {
+      return product.price.String;
+    }
+  };
+  
+  const isProductActive = (product) => {
+    if (!product.is_active) return false;
+    return product.is_active.Valid ? product.is_active.Bool : false;
   };
 
-  const handleCheckboxChange = (e) => {
-    const { name, checked } = e.target;
-    setNewProduct({ ...newProduct, [name]: checked });
+  const getDocumentCount = (product) => {
+    if (!product.document_count) return 0;
+    if (typeof product.document_count === 'number') return product.document_count;
+    return product.document_count.Int32 || 0;
   };
 
   if (isLoading && products.length === 0) {
@@ -162,7 +149,7 @@ const Products = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Products</h1>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => setShowAddForm(true)}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-200"
         >
           Add Product
@@ -172,7 +159,34 @@ const Products = () => {
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
           <p>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+          >
+            Retry
+          </button>
         </div>
+      )}
+
+      {/* Product Creation Form (conditional) */}
+      {showAddForm && (
+        <Modal
+          isOpen={showAddForm}
+          onClose={() => {
+            setShowAddForm(false);
+            navigate('/products');
+          }}
+          title="Add New Product"
+          size="lg"
+        >
+          <CreateProductForm 
+            onSuccess={handleProductCreated}
+            onCancel={() => {
+              setShowAddForm(false);
+              navigate('/products');
+            }}
+          />
+        </Modal>
       )}
 
       {/* Products list */}
@@ -213,37 +227,32 @@ const Products = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
                       <Link to={`/products/${product.id}`} className="hover:text-blue-600 hover:underline">
-                        {product.name}
+                        {formatName(product)}
                       </Link>
                     </div>
                     <div className="text-sm text-gray-500">
-                      {product.description?.Valid ? product.description.String.substring(0, 50) + (product.description.String.length > 50 ? '...' : '') : ''}
+                      {formatDescription(product).substring(0, 50)}
+                      {formatDescription(product).length > 50 ? '...' : ''}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{product.category?.Valid ? product.category.String : '-'}</div>
+                    <div className="text-sm text-gray-900">{formatCategory(product) || '-'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {product.price?.Valid && product.currency?.Valid ? (
-                      <div className="text-sm text-gray-900">
-                        {product.currency.String} {parseFloat(product.price.String).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-500">-</span>
-                    )}
+                    <div className="text-sm text-gray-900">{formatPrice(product)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {product.document_count?.Valid ? product.document_count.Int32 : 0}
+                      {getDocumentCount(product)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      product.is_active?.Bool 
+                      isProductActive(product) 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {product.is_active?.Bool ? 'Active' : 'Inactive'}
+                      {isProductActive(product) ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -265,110 +274,33 @@ const Products = () => {
             )}
           </tbody>
         </table>
+        
+        {/* Pagination */}
+        {totalProducts > pageSize && (
+          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200">
+            <div className="flex-1 flex justify-between">
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                  page === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(page + 1)}
+                disabled={products.length < pageSize}
+                className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                  products.length < pageSize ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Add Product Modal */}
-      <Modal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        title="Add New Product"
-        size="lg"
-      >
-        <form onSubmit={handleCreateProduct}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input
-                type="text"
-                name="name"
-                value={newProduct.name}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                name="description"
-                value={newProduct.description}
-                onChange={handleInputChange}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              ></textarea>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <input
-                type="text"
-                name="category"
-                value={newProduct.category}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={newProduct.price}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                <select
-                  name="currency"
-                  value={newProduct.currency}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="GBP">GBP</option>
-                  <option value="JPY">JPY</option>
-                  <option value="CAD">CAD</option>
-                  <option value="AUD">AUD</option>
-                </select>
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={newProduct.is_active}
-                  onChange={handleCheckboxChange}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm text-gray-700">
-                  Active
-                </label>
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              Add Product
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Delete Confirmation Modal */}
       <Modal
@@ -381,7 +313,7 @@ const Products = () => {
           <p className="text-gray-700">
             Are you sure you want to delete product{' '}
             <span className="font-semibold">
-              {selectedProduct ? selectedProduct.name : ''}
+              {selectedProduct ? formatName(selectedProduct) : ''}
             </span>?
             This action cannot be undone.
           </p>
@@ -410,110 +342,4 @@ const Products = () => {
   );
 };
 
-// Create a productsService to centralize API calls
-export const productsService = {
-  getProducts: async (pageId = 1, pageSize = 10) => {
-    try {
-      const response = await apiClient.get(`/products?page_id=${pageId}&page_size=${pageSize}`);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      throw error;
-    }
-  },
-  
-  getProduct: async (id) => {
-    try {
-      const response = await apiClient.get(`/products/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching product ${id}:`, error);
-      throw error;
-    }
-  },
-  
-  createProduct: async (productData) => {
-    try {
-      const response = await apiClient.post('/products', productData);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating product:', error);
-      throw error;
-    }
-  },
-  
-  updateProduct: async (id, productData) => {
-    try {
-      const response = await apiClient.put(`/products/${id}`, productData);
-      return response.data;
-    } catch (error) {
-      console.error(`Error updating product ${id}:`, error);
-      throw error;
-    }
-  },
-  
-  deleteProduct: async (id) => {
-    try {
-      const response = await apiClient.delete(`/products/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error deleting product ${id}:`, error);
-      throw error;
-    }
-  },
-  
-  // Document-related methods
-  getProductDocuments: async (productId, pageId = 1, pageSize = 10) => {
-    try {
-      const response = await apiClient.get(`/products/${productId}/documents`, {
-        params: { page_id: pageId, page_size: pageSize }
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching documents for product ${productId}:`, error);
-      throw error;
-    }
-  },
-  
-  uploadDocument: async (formData) => {
-    try {
-      const response = await apiClient.post('/products/documents', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      throw error;
-    }
-  },
-  
-  deleteDocument: async (documentId) => {
-    try {
-      const response = await apiClient.delete(`/products/documents/${documentId}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error deleting document ${documentId}:`, error);
-      throw error;
-    }
-  },
-  
-  searchDocuments: async (productId, query, pageId = 1, pageSize = 10) => {
-    try {
-      const response = await apiClient.get(`/products/${productId}/documents/search`, {
-        params: {
-          query,
-          page_id: pageId,
-          page_size: pageSize
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error searching documents for product ${productId}:`, error);
-      throw error;
-    }
-  }
-};
-
-export default Products; 
+export default Products;

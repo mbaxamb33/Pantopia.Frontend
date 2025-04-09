@@ -1,11 +1,13 @@
 // src/pages/products/ProductDetail.jsx
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import apiClient from '../../api/apiClient';
 import DocumentViewer from '../../components/products/DocumentViewer';
+import DocumentUploader from '../../components/products/DocumentUploader';
+import DocumentSectionViewer from '../../components/products/DocumentSectionViewer';
 
 // Helper function to safely extract string values from nullable fields
 const extractString = (nullableField) => {
@@ -35,6 +37,8 @@ const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const notification = useNotification();
+  const [searchParams] = useSearchParams();
+  const showUploadModal = searchParams.get('action') === 'upload';
   
   const [product, setProduct] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -45,6 +49,8 @@ const ProductDetail = () => {
   const [documentsError, setDocumentsError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
+  const [showUploader, setShowUploader] = useState(showUploadModal);
+  const [viewDocumentSections, setViewDocumentSections] = useState(false);
 
   // Fetch product details
   useEffect(() => {
@@ -79,81 +85,111 @@ const ProductDetail = () => {
       setDocumentsError(null);
       
       try {
-        // Try fetching documents using multiple potential endpoints
-        const endpoints = [
-          `/products/${id}/documents`,
-          `/documents?product_id=${id}`,
-          `/api/products/${id}/documents`
-        ];
-
-        let response;
-        for (const endpoint of endpoints) {
-          try {
-            response = await apiClient.get(endpoint, {
-              params: { page_id: page, page_size: pageSize }
-            });
-            
-            // If request succeeds, break the loop
-            if (response.data) break;
-          } catch (err) {
-            // Continue to next endpoint if this one fails
-            console.warn(`Failed to fetch from ${endpoint}:`, err);
+        // Make sure to include all required parameters with the correct casing
+        // Your backend expects ProductID (capital I, capital D) not product_id
+        const response = await apiClient.get(`/products/${id}/documents`, {
+          params: { 
+            product_id: id,  // Add this even though it's in the URL path
+            ProductID: id,   // Add this with the expected casing
+            page_id: page,
+            PageID: page,    // Add this with the expected casing
+            page_size: pageSize,
+            PageSize: pageSize // Add this with the expected casing
           }
-        }
-
-        // Validate and extract documents
-        const fetchedDocuments = response?.data ? 
-          (Array.isArray(response.data) ? response.data : 
-           (response.data.documents || response.data.data || [])) : [];
+        });
         
+        const fetchedDocuments = response?.data || [];
         setDocuments(fetchedDocuments);
         
-        // Optional: Notify if no documents found
-        if (fetchedDocuments.length === 0) {
-          notification.showInfo('No Documents', 'No documents found for this product.');
+        // Don't show notification for empty documents on first load
+        if (fetchedDocuments.length === 0 && page === 1) {
+          // Silent - don't notify about initial empty state
+          console.log("No documents found for this product.");
         }
       } catch (err) {
         console.error(`Error fetching documents for product ${id}:`, err);
         
-        // Extract meaningful error message
+        // Only show a single error notification, don't re-notify on every retry
         const errorMessage = err.response?.data?.error || 
                              err.message || 
                              'Failed to load documents';
+                             
+        setDocumentsError("No documents available.");
         
-        setDocumentsError(errorMessage);
-        notification.showError('Error', errorMessage);
+        // Set documents to empty array to prevent further retries
+        setDocuments([]);
         
-        // Optional: Set mock documents for development/testing
-        const mockDocuments = [
-          {
-            id: 1,
-            file_name: { String: 'Product_Specification.docx', Valid: true },
-            file_type: 'docx',
-            file_size: 1024 * 100, // 100 KB
-            description: { String: 'Technical specifications', Valid: true },
-            metadata: { 
-              Valid: true, 
-              RawMessage: JSON.stringify({ 
-                title: 'Product Specification', 
-                author: 'John Doe' 
-              }) 
-            }
-          }
-        ];
-        
-        setDocuments(mockDocuments);
+        // Don't show error notification for a product with no documents
+        // console.log("Document fetch error:", errorMessage);
       } finally {
         setIsDocumentsLoading(false);
       }
     };
 
-    if (product) {
+    // Only fetch documents once when the product first loads
+    if (product && documents.length === 0) {
       fetchDocuments();
     }
-  }, [id, product, page, pageSize, notification]);
+  }, [id, product, notification]);
+
+  const handleUploadComplete = (data) => {
+    // Close the uploader
+    setShowUploader(false);
+    navigate(`/products/${id}`);
+    
+    // Update documents list
+    setDocuments(prevDocs => [data.document, ...prevDocs]);
+    
+    // Update product document count if available
+    if (product && data.document_count) {
+      setProduct({
+        ...product,
+        document_count: { Int32: data.document_count, Valid: true }
+      });
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    try {
+      setIsLoading(true);
+      
+      await apiClient.delete(`/products/documents/details/${docId}`);
+      
+      // Remove document from list
+      setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== docId));
+      
+      // Update document count
+      if (product && product.document_count && product.document_count.Valid) {
+        setProduct({
+          ...product,
+          document_count: { 
+            Int32: Math.max(0, product.document_count.Int32 - 1), 
+            Valid: true 
+          }
+        });
+      }
+      
+      // Close any open document
+      if (selectedDocument && selectedDocument.id === docId) {
+        setSelectedDocument(null);
+      }
+      
+      notification.showSuccess('Success', 'Document deleted successfully');
+    } catch (err) {
+      console.error(`Error deleting document ${docId}:`, err);
+      notification.showError('Error', 'Failed to delete document');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleViewSections = (document) => {
+    setSelectedDocument(document);
+    setViewDocumentSections(true);
+  };
 
   // If loading initial product details, show spinner
-  if (isLoading) {
+  if (isLoading && !product) {
     return (
       <div className="flex justify-center items-center h-64">
         <Spinner size="lg" />
@@ -274,16 +310,26 @@ const ProductDetail = () => {
         </div>
       </div>
 
+      {/* Document Uploader (shown conditionally) */}
+      {showUploader && (
+        <DocumentUploader 
+          productId={id} 
+          onUploadComplete={handleUploadComplete} 
+        />
+      )}
+
       {/* Documents Section */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Documents</h2>
-          <button
-            onClick={() => navigate(`/products/${id}?action=upload`)}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Upload Document
-          </button>
+          {!showUploader && (
+            <button
+              onClick={() => setShowUploader(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Upload Document
+            </button>
+          )}
         </div>
         
         {isDocumentsLoading ? (
@@ -309,12 +355,11 @@ const ProductDetail = () => {
             {documents.map((doc, index) => (
               <div 
                 key={`${doc.id}-${index}`} 
-                className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setSelectedDocument(doc)}
+                className="border rounded-lg p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex items-center mb-2">
-                  <div className="mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="h-10 w-10 bg-blue-100 rounded-md flex items-center justify-center text-blue-500 mr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
@@ -325,6 +370,28 @@ const ProductDetail = () => {
                     </p>
                   </div>
                 </div>
+                <div className="flex mt-3 justify-between text-sm">
+                  <div>
+                    <button
+                      onClick={() => setSelectedDocument(doc)}
+                      className="text-blue-600 hover:text-blue-800 mr-3"
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={() => handleViewSections(doc)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      Sections
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteDocument(doc.id)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -332,9 +399,9 @@ const ProductDetail = () => {
       </div>
 
       {/* Document Viewer Modal */}
-      {selectedDocument && (
+      {selectedDocument && !viewDocumentSections && (
         <Modal
-          isOpen={!!selectedDocument}
+          isOpen={!!selectedDocument && !viewDocumentSections}
           onClose={() => setSelectedDocument(null)}
           title="Document Details"
           size="lg"
@@ -342,6 +409,23 @@ const ProductDetail = () => {
           <DocumentViewer document={selectedDocument} />
         </Modal>
       )}
+
+      {/* Document Sections Viewer Modal */}
+      {selectedDocument && viewDocumentSections && (
+        <Modal
+          isOpen={!!selectedDocument && viewDocumentSections}
+          onClose={() => {
+            setSelectedDocument(null);
+            setViewDocumentSections(false);
+          }}
+          title="Document Sections"
+          size="xl"
+        >
+          <DocumentSectionViewer documentId={selectedDocument.document_id || selectedDocument.id} />
+        </Modal>
+      )}
+
+      {isLoading && <Spinner fullPage />}
     </div>
   );
 };

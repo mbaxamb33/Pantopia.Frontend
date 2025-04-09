@@ -56,11 +56,34 @@ export const productsService = {
   getProductDocuments: async (productId, pageId = 1, pageSize = 10) => {
     try {
       const response = await apiClient.get(`/products/${productId}/documents`, {
-        params: { page_id: pageId, page_size: pageSize }
+        params: { 
+          product_id: productId,
+          ProductID: productId, // Include with the exact casing expected by backend
+          page_id: pageId,
+          PageID: pageId,       // Include with the exact casing expected by backend
+          page_size: pageSize,
+          PageSize: pageSize    // Include with the exact casing expected by backend
+        }
       });
       return response.data;
     } catch (error) {
       console.error(`Error fetching documents for product ${productId}:`, error);
+      // Return empty array instead of throwing if there are no documents
+      if (error.response?.status === 400) {
+        return [];
+      }
+      throw error;
+    }
+  },
+  
+  getDocumentSections: async (documentId, pageId = 1, pageSize = 100) => {
+    try {
+      const response = await apiClient.get(`/documents/${documentId}/sections`, {
+        params: { page_id: pageId, page_size: pageSize }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching sections for document ${documentId}:`, error);
       throw error;
     }
   },
@@ -79,9 +102,19 @@ export const productsService = {
     }
   },
   
+  getDocumentDetail: async (documentId) => {
+    try {
+      const response = await apiClient.get(`/products/documents/details/${documentId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching document details ${documentId}:`, error);
+      throw error;
+    }
+  },
+  
   deleteDocument: async (documentId) => {
     try {
-      const response = await apiClient.delete(`/products/documents/${documentId}`);
+      const response = await apiClient.delete(`/products/documents/details/${documentId}`);
       return response.data;
     } catch (error) {
       console.error(`Error deleting document ${documentId}:`, error);
@@ -101,6 +134,22 @@ export const productsService = {
       return response.data;
     } catch (error) {
       console.error(`Error searching documents for product ${productId}:`, error);
+      throw error;
+    }
+  },
+  
+  searchDocumentSections: async (documentId, query, pageId = 1, pageSize = 10) => {
+    try {
+      const response = await apiClient.get(`/documents/${documentId}/search`, {
+        params: {
+          query,
+          page_id: pageId,
+          page_size: pageSize
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error searching sections for document ${documentId}:`, error);
       throw error;
     }
   }

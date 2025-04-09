@@ -8,13 +8,31 @@ const DocumentViewer = ({ document }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!document?.metadata?.Valid) return;
+    if (!document) return;
 
     try {
-      const parsedMetadata = JSON.parse(document.metadata.RawMessage);
+      // Parse metadata if it exists
+      let parsedMetadata = null;
+      
+      if (document.metadata?.Valid && document.metadata.RawMessage) {
+        try {
+          parsedMetadata = JSON.parse(document.metadata.RawMessage);
+        } catch (jsonErr) {
+          console.error('Error parsing document metadata JSON:', jsonErr);
+          // Try to handle the case where RawMessage is already a string representation of JSON
+          if (typeof document.metadata.RawMessage === 'string') {
+            try {
+              parsedMetadata = JSON.parse(document.metadata.RawMessage);
+            } catch (nestedErr) {
+              console.error('Error parsing string metadata:', nestedErr);
+            }
+          }
+        }
+      }
+      
       setMetadata(parsedMetadata);
     } catch (err) {
-      console.error('Error parsing document metadata:', err);
+      console.error('Error handling document metadata:', err);
       setError('Failed to parse document metadata');
     }
   }, [document]);
@@ -44,6 +62,31 @@ const DocumentViewer = ({ document }) => {
     );
   }
 
+  // Helper function to safely extract file size
+  const getFileSize = (size) => {
+    if (!size && size !== 0) return 'Unknown';
+    return formatFileSize(size);
+  };
+
+  // Extract content from nullable field
+  const getExtractedContent = () => {
+    if (!document.extracted_content) return null;
+    if (typeof document.extracted_content === 'string') return document.extracted_content;
+    return document.extracted_content.Valid ? document.extracted_content.String : null;
+  };
+
+  // Extract file name from nullable field
+  const getFileName = () => {
+    if (!document.file_name) return 'Unnamed Document';
+    if (typeof document.file_name === 'string') return document.file_name;
+    return document.file_name.Valid ? document.file_name.String : 'Unnamed Document';
+  };
+
+  // Get file type
+  const getFileType = () => {
+    return document.file_type || 'docx';
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="bg-gray-100 p-4 border-b flex items-center">
@@ -53,9 +96,9 @@ const DocumentViewer = ({ document }) => {
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold">{document.file_name}</h3>
+          <h3 className="text-lg font-semibold">{getFileName()}</h3>
           <p className="text-sm text-gray-500">
-            {document.file_type.toUpperCase()} • {formatFileSize(document.file_size)} • Uploaded on {formatDate(document.created_at)}
+            {getFileType().toUpperCase()} • {getFileSize(document.file_size)} • Uploaded on {formatDate(document.created_at)}
           </p>
         </div>
       </div>
@@ -133,13 +176,13 @@ const DocumentViewer = ({ document }) => {
       )}
       
       {/* Document Content Preview */}
-      {document.extracted_content?.Valid && (
+      {getExtractedContent() && (
         <div className="p-4">
           <h4 className="text-sm font-semibold text-gray-700 mb-2">Content Preview</h4>
           <div className="bg-gray-50 p-3 rounded border border-gray-200 max-h-60 overflow-y-auto">
             <p className="text-sm whitespace-pre-wrap">
-              {document.extracted_content.String.substring(0, 500)}
-              {document.extracted_content.String.length > 500 && '...'}
+              {getExtractedContent().substring(0, 500)}
+              {getExtractedContent().length > 500 && '...'}
             </p>
           </div>
         </div>
@@ -160,7 +203,9 @@ const formatFileSize = (bytes) => {
 };
 
 const formatDate = (dateString) => {
+  if (!dateString) return 'Unknown';
   return new Date(dateString).toLocaleString();
 };
 
+// Make sure to export the component as default
 export default DocumentViewer;
