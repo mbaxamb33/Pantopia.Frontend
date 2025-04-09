@@ -68,6 +68,7 @@ const Layout = () => {
           <NavItem to="/sales-flows" icon="🔄" label="Sales Flows" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/settings" icon="⚙️" label="Settings" isSidebarOpen={isSidebarOpen} />
           <NavItem to="/integrations" icon="🔗" label="Integrations" isSidebarOpen={isSidebarOpen} />
+          <NavItem to="/products" icon="📦" label="Products" isSidebarOpen={isSidebarOpen} />
                   </nav>
       </div>
 

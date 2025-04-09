@@ -26,6 +26,10 @@ import Settings from './pages/Settings';
 import Integrations from './pages/Integrations';
 import NotFound from './pages/NotFound';
 
+import Products from './pages/Products';
+import ProductDetail from './pages/products/ProductDetail';
+import ProductEdit from './pages/products/ProductEdit';
+
 
 import Agents from './pages/Agents';
 import AgentDetail from './pages/agents/AgentDetail';
@@ -106,6 +110,11 @@ function App() {
               <Route path="/meetings" element={<Meetings />} />
               <Route path="/sales-flows" element={<SalesFlows />} />
               <Route path="/settings" element={<Settings />} />
+
+
+              <Route path="/products" element={<Products />} />
+              <Route path="/products/:id" element={<ProductDetail />} />
+              <Route path="/products/:id/edit" element={<ProductEdit />} />
             </Route>
           </Route>
           

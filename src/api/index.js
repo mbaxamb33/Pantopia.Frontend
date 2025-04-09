@@ -3,6 +3,7 @@ import apiClient, { apiService } from './apiClient';
 import contactsService from './contactsService';
 import { conversationsService } from './conversationsService';
 import { agentService } from './agentService';  // Add this line
+import productsService from './productsService';
 
 // Create a placeholder service for other entity types that will be fully implemented later
 const createPlaceholderService = (basePath) => ({
@@ -111,5 +112,6 @@ export {
   meetingsService,
   salesFlowsService,
   authService,
+  productsService,
   healthCheck
 };
